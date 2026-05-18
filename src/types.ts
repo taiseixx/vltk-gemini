@@ -1,0 +1,144 @@
+
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythical';
+
+export interface Sect {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  motto: string;
+  stats: {
+    str: number;
+    agi: number;
+    con: number;
+    int: number;
+    nei: number;
+  };
+  skills: string[];
+}
+
+export interface Skill {
+  name: string;
+  level: number;
+  maxLevel: number;
+  cooldown: number;
+  cooldownLeft: number;
+  manaCost: number;
+  baseDamage: number;
+  range: number;
+  color: string;
+}
+
+export interface Equipment {
+  type: 'weapon' | 'armor' | 'accessory' | 'special';
+  rarity: Rarity;
+  power: number;
+  name: string;
+}
+
+export interface Entity {
+  id: number;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  atk: number;
+  speed: number;
+  size: number;
+  atkCd: number;
+  color: string;
+  isBoss: boolean;
+  name?: string;
+}
+
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife?: number;
+  color: string;
+  size: number;
+  isBlast?: boolean;
+  type?: 'dot' | 'blast' | 'ring' | 'pillar' | 'sword' | 'trail' | 'text' | 'shockwave';
+  rotation?: number;
+  vr?: number;
+}
+
+export interface FloatingText {
+  id: number;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+}
+
+export interface Drop {
+  id: number;
+  x: number;
+  y: number;
+  type: 'weapon' | 'armor' | 'accessory' | 'special';
+  rarity: Rarity;
+  power: number;
+  name: string;
+}
+
+export interface GameState {
+  state: 'SELECTING' | 'PLAYING' | 'CLEARED' | 'GAMEOVER';
+  stage: number;
+  lives: number;
+  gold: number;
+  exp: number;
+  mobsTotal: number;
+  mobsKilled: number;
+  bossSpawned: boolean;
+  auto: boolean;
+  
+  player: {
+    x: number;
+    y: number;
+    targetX: number;
+    targetY: number;
+    radius: number;
+    speed: number;
+    facing: number;
+    level: number;
+    statPoints: number;
+    skillPoints: number;
+    baseStats: Sect['stats'];
+    currentStats: Sect['stats'];
+    hp: number;
+    maxHp: number;
+    mp: number;
+    maxMp: number;
+    atk: number;
+    target: Entity | null;
+    moving: boolean;
+    atkCd: number;
+    dead: boolean;
+    color: string;
+    icon: string;
+    equipment: {
+      weapon: Equipment | null;
+      armor: Equipment | null;
+      accessory: Equipment | null;
+      special: Equipment | null;
+    };
+  };
+
+  buffs: {
+    dmgMult: number;
+    hpMult: number;
+    cdReduc: number;
+    resMult: number;
+    rlGold: number;
+    rlExp: number;
+    rlExec: number;
+  };
+
+  skills: Skill[];
+  entities: Entity[];
+  drops: Drop[];
+}

@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Grenze+Gotisch:wght@400;700&family=Metamorphous&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Metamorphous", serif;
+  --font-display: "Grenze Gotisch", serif;
+  --font-sans: "Inter", sans-serif;
+  
+  --color-gold: #d4af37;
+  --color-dark-bg: #050508;
+  --color-card-bg: #121218;
+  --color-sidebar-bg: #0c0c12;
+}
+
+@layer base {
+  body {
+    @apply bg-dark-bg text-gray-200 antialiased overflow-hidden font-sans;
+  }
+}
+
+.animate-spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+.animate-spin-normal {
+  animation: spin 2s linear infinite;
+}
+
+.animate-spin-fast {
+  animation: spin 1.5s linear infinite;
+}
+
+.bar-bg {
+  @apply h-2.5 rounded-full bg-black border border-gray-800 overflow-hidden relative;
+}
+
+.rarity-common { @apply border-gray-600 text-gray-500; }
+.rarity-rare { @apply border-green-600 text-green-500; }
+.rarity-epic { @apply border-purple-600 text-purple-500; }
+.rarity-legendary { @apply border-orange-600 text-orange-500; }
+.rarity-mythical { @apply border-gold text-gold shadow-[0_0_15px_rgba(212,175,55,0.3)]; }
+
+.gold-shadow {
+  @apply shadow-[0_0_15px_rgba(212,175,55,0.3)];
+}
+
+.card-hover {
+  @apply transition-all cursor-pointer hover:border-gold hover:shadow-[0_0_30px_rgba(212,175,55,0.1)];
+}

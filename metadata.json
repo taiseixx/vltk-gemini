@@ -1,0 +1,8 @@
+{
+  "name": "Võ Lâm Giang Hồ: Vượt Ải",
+  "description": "Một tựa game Roguelite kiếm hiệp với hệ thống môn phái, trang bị và kỹ năng đa dạng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
