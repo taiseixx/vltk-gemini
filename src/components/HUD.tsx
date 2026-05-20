@@ -66,8 +66,14 @@ export default function HUD({ gameState, onAvatarClick }: Props) {
 
       {/* Stage Progress Center */}
       <div className="hidden md:flex flex-col items-center">
-        <h2 className="text-gold font-serif uppercase tracking-[0.2em] text-xs mb-1.5 drop-shadow-md">
-          Ải {gameState.stage} — {gameState.bossSpawned ? 'Thủ Lĩnh Xuất Thế' : 'Trúc Lâm Thâm Xứ'}
+        <h2 className="text-shimmer-gold font-serif uppercase tracking-[0.2em] text-lg font-extrabold mb-1 drop-shadow-[0_0_12px_rgba(212,175,55,0.4)]">
+          Ải {gameState.stage} — {
+            gameState.stagePhase === 'SUB_BOSSES' 
+              ? '⚡ Thủ Hộ Pháp Điện ⚡' 
+              : gameState.stagePhase === 'FINAL_BOSS' 
+              ? '👑 Trấn Diệt Thủ Lĩnh 👑' 
+              : '⚔️ Trúc Lâm Kiếm Ảnh ⚔️'
+          }
         </h2>
         <div className="flex gap-1.5">
           {Array.from({ length: 5 }).map((_, i) => {
@@ -81,8 +87,12 @@ export default function HUD({ gameState, onAvatarClick }: Props) {
             );
           })}
         </div>
-        <p className="text-[9px] text-gray-500 mt-1 uppercase tracking-widest font-bold">
-          {gameState.mobsTotal - gameState.mobsKilled} CÒN LẠI
+        <p className="text-[9px] text-gray-400 mt-1 uppercase tracking-widest font-bold font-serif">
+          {gameState.mobsTotal - gameState.mobsKilled > 0 
+            ? `${gameState.mobsTotal - gameState.mobsKilled} YÊU BINH` 
+            : gameState.stagePhase === 'SUB_BOSSES'
+            ? 'TIÊU DIỆT HỘ PHÁP'
+            : 'TIÊU DIỆT THỦ LĨNH'}
         </p>
       </div>
 
@@ -101,8 +111,12 @@ export default function HUD({ gameState, onAvatarClick }: Props) {
       
       {/* Mobile Stage Progress */}
       <div className="w-full flex md:hidden justify-between items-center px-1 mt-1 border-t border-white/5 pt-1">
-        <span className="text-[10px] text-gold font-bold font-serif uppercase tracking-wider">Ải {gameState.stage}</span>
-        <span className="text-[9px] text-gray-500 font-bold">{gameState.mobsTotal - gameState.mobsKilled} CÒN LẠI</span>
+        <span className="text-[10px] text-shimmer-gold font-bold font-serif uppercase tracking-wider">Ải {gameState.stage}</span>
+        <span className="text-[9px] text-gray-400 font-bold">{
+          gameState.mobsTotal - gameState.mobsKilled > 0 
+            ? `${gameState.mobsTotal - gameState.mobsKilled} CÒN LẠI` 
+            : 'QUYẾT CHIẾN BOSS'
+        }</span>
       </div>
     </header>
   );

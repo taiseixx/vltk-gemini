@@ -6,12 +6,14 @@ import {
   MutableRefObject,
   PointerEvent,
 } from "react";
-import { GameState, Entity, Particle, FloatingText, Drop } from "../types";
+import { GameState, Entity, Particle, FloatingText, Drop, EquipmentType } from "../types";
 import {
   MAP_SIZE,
   RARITY_COLORS,
   RARITY_MULTIPLIERS,
   WEAPON_NAMES,
+  RARITIES,
+  EQUIPMENT_NAME_MAP,
 } from "../constants";
 
 interface Props {
@@ -45,6 +47,8 @@ export default function GameCanvas({
   const cameraRef = useRef({ x: MAP_SIZE / 2, y: MAP_SIZE / 2 });
   const stateRef = useRef(gameState);
   stateRef.current = gameState;
+  const pointerDownRef = useRef(false);
+  const startPointerRef = useRef<{ clientX: number, clientY: number } | null>(null);
 
   const setStateAsync = (updater: (prev: GameState | null) => GameState | null) => {
     setGameState((prev) => {
@@ -64,7 +68,45 @@ export default function GameCanvas({
     isBoss: boolean,
     moving: boolean,
     time: number,
+    hasCloak: boolean = false,
   ) => {
+    // Elegant Angelic Wings (Cloak equipment)
+    if (hasCloak) {
+      const wingFlap = Math.sin(time * 0.006) * sz * 0.5;
+      ctx.save();
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "rgba(235, 95, 175, 0.9)"; // Magical purple/pink wings
+      ctx.fillStyle = "rgba(235, 95, 175, 0.15)";
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = "rgb(235, 95, 175)";
+      
+      // Left Wing
+      ctx.beginPath();
+      ctx.moveTo(x - sz * 0.2, y);
+      ctx.bezierCurveTo(
+        x - sz * 2.8, y - sz * 1.8 + wingFlap,
+        x - sz * 3.4, y + sz * 0.8 + wingFlap,
+        x - sz * 0.2, y + sz * 0.8
+      );
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+
+      // Right Wing
+      ctx.beginPath();
+      ctx.moveTo(x + sz * 0.2, y);
+      ctx.bezierCurveTo(
+        x + sz * 2.8, y - sz * 1.8 + wingFlap,
+        x + sz * 3.4, y + sz * 0.8 + wingFlap,
+        x + sz * 0.2, y + sz * 0.8
+      );
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+      
+      ctx.restore();
+    }
+
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.4)";
     ctx.beginPath();
@@ -112,12 +154,32 @@ export default function GameCanvas({
     ctx.stroke();
   };
 
+  const getBossCount = (stage: number): number => {
+    if (stage < 10) return 1;
+    const exp = Math.floor(stage / 10);
+    return Math.pow(2, exp);
+  };
+
+  const getMobsTotal = (stage: number): number => {
+    const baseMobs = 10 + stage * 2;
+    const bosses = getBossCount(stage);
+    return baseMobs + bosses * 24;
+  };
+
   const spawnWave = () => {
-    const hpBase = 30 * Math.pow(1.15, stateRef.current.stage - 1);
-    const atkBase = 5 * Math.pow(1.1, stateRef.current.stage - 1);
+    const stage = stateRef.current.stage;
+    // Scale strength multiplier only on stages 10 and above
+    const strengthMult = stage >= 10 ? (1 + getBossCount(stage) * 0.15) : 1.0;
+    const stage20Boost = stage > 20 ? (1.3 + (stage - 20) * 0.05) : 1.0;
+
+    const hpBase = 18 * Math.pow(1.13, stage - 1) * strengthMult * stage20Boost;
+    const atkBase = 2.5 * Math.pow(1.08, stage - 1) * strengthMult * (stage > 20 ? 1.25 : 1.0);
     const newEntities: Entity[] = [];
 
-    for (let i = 0; i < 6; i++) {
+    // Số đợt quái tăng đột khởi dồn dập sau stage 20
+    const spawnCount = stage > 20 ? Math.min(22, 6 + Math.floor((stage - 20) * 1.5)) : 6;
+
+    for (let i = 0; i < spawnCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 300 + Math.random() * 300;
       newEntities.push({
@@ -128,35 +190,76 @@ export default function GameCanvas({
         hp: hpBase,
         maxHp: hpBase,
         atk: atkBase,
-        speed: 50 + Math.random() * 30,
+        speed: (50 + Math.random() * 30) * (stage > 20 ? 1.3 : 1.0),
         size: 16,
         atkCd: 0,
-        color: "#7f8c8d",
+        color: stage > 20 ? "#8e44ad" : "#7f8c8d",
       });
     }
     entitiesRef.current = [...entitiesRef.current, ...newEntities];
   };
 
-  const spawnBoss = () => {
-    const hpBase = 200 * Math.pow(1.2, stateRef.current.stage - 1);
-    const atkBase = 15 * Math.pow(1.15, stateRef.current.stage - 1);
-    const boss: Entity = {
-      id: Math.random(),
-      isBoss: true,
-      name: `Thủ Lĩnh Ải ${stateRef.current.stage}`,
-      x: stateRef.current.player.x + 300,
-      y: stateRef.current.player.y,
-      hp: hpBase,
-      maxHp: hpBase,
-      atk: atkBase,
-      speed: 70,
-      size: 25,
-      atkCd: 0,
-      color: "#c0392b",
-    };
-    entitiesRef.current.push(boss);
-    addNotification("👑 BOSS XUẤT HIỆN!", "#c0392b");
-    setStateAsync((prev) => (prev ? { ...prev, bossSpawned: true } : null));
+  const spawnSubBosses = (count: number, stage: number) => {
+    const actualSubBossCount = stage > 20 ? count + 1 : count;
+    const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.25) * (stage > 20 ? 1.5 : 1.0);
+    const hpBase = 70 * Math.pow(1.16, stage - 1) * scaleFactor;
+    const atkBase = 6 * Math.pow(1.12, stage - 1) * scaleFactor;
+    const size = Math.min(45, Math.floor(20 * scaleFactor));
+
+    const p = stateRef.current.player;
+    const newBosses: Entity[] = [];
+    for (let i = 0; i < actualSubBossCount; i++) {
+      const angle = (Math.PI * 2 / actualSubBossCount) * i;
+      newBosses.push({
+        id: Math.random(),
+        isBoss: false,
+        isSubBoss: true,
+        name: stage > 20 ? `🔴 Tam Ma Vương Hộ Pháp ${i + 1}` : `Tịnh Vương Hộ Pháp ${i + 1}`,
+        x: p.x + Math.cos(angle) * 320,
+        y: p.y + Math.sin(angle) * 320,
+        hp: hpBase,
+        maxHp: hpBase,
+        atk: atkBase,
+        speed: stage > 20 ? 100 : 75,
+        size,
+        atkCd: 0,
+        color: stage > 20 ? "#d35400" : "#16a085",
+      });
+    }
+
+    entitiesRef.current = [...entitiesRef.current, ...newBosses];
+    addNotification(`⚔️ KHAI CHIẾN ${actualSubBossCount} HỘ PHÁP THỦ LĨNH!`, stage > 20 ? "#d35400" : "#16a085");
+  };
+
+  const spawnFinalBosses = (count: number, stage: number) => {
+    const isLateGame = stage > 20;
+    const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.35) * (isLateGame ? 1.6 : 1.0);
+    const hpBase = 120 * Math.pow(1.18, stage - 1) * scaleFactor;
+    const atkBase = 10 * Math.pow(1.12, stage - 1) * scaleFactor;
+    const size = Math.min(75, Math.floor(26 * scaleFactor));
+
+    const p = stateRef.current.player;
+    const newBosses: Entity[] = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 / count) * i;
+      newBosses.push({
+        id: Math.random(),
+        isBoss: true,
+        name: isLateGame ? `🔥 VÔ THỰNG DIÊM VƯƠNG TRÙM CUỐI` : `Trùm Cuối Đại Sứ (Boss ${i + 1})`,
+        x: p.x + Math.cos(angle) * 350,
+        y: p.y + Math.sin(angle) * 350,
+        hp: hpBase,
+        maxHp: hpBase,
+        atk: atkBase,
+        speed: isLateGame ? 95 : 68,
+        size,
+        atkCd: 0,
+        color: isLateGame ? "#9b59b6" : "#c0392b",
+      });
+    }
+
+    entitiesRef.current = [...entitiesRef.current, ...newBosses];
+    addNotification(isLateGame ? "🔥 VÔ THỰNG CHI CHỦ DIÊM LA DIỆU THẾ XUẤT HIỆN!" : "👑 THẦN ĐIỆN CHIẾN BOSS CUỐI XUẤT HIỆN!", "#c0392b");
   };
 
   const update = (dt: number) => {
@@ -167,10 +270,17 @@ export default function GameCanvas({
       const p = { ...prev.player };
       const buffs = prev.buffs;
 
+      // Banner aura passive damage effect
+      if (p.equipment.banner && !p.dead) {
+        if (!p.atkCd) p.atkCd = 0; // abuse unused field to tick down aura
+        // Tick down a small custom count or manual count
+        // Let's declare aura timer ref or track elapsed
+      }
+
       // Regains
       if (!p.dead) {
-        p.hp = Math.min(p.maxHp, p.hp + p.currentStats.con * 0.5 * dt);
-        p.mp = Math.min(p.maxMp, p.mp + p.currentStats.nei * 1 * dt);
+        p.hp = Math.min(p.maxHp, p.hp + (p.currentStats.con * 1.5 + 4) * dt);
+        p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 3.0 + 8) * dt);
       }
 
       // Death wait
@@ -203,19 +313,32 @@ export default function GameCanvas({
       const mobsNeeded = prev.mobsTotal;
       const mobsKilled = prev.mobsKilled;
       const entitiesCount = entitiesRef.current.length;
+      let nextPhase = prev.stagePhase || 'CREEPS';
+      let bossSpawned = prev.bossSpawned;
 
-      if (
-        entitiesCount < 4 &&
-        mobsKilled + entitiesCount < mobsNeeded &&
-        !prev.bossSpawned
-      ) {
-        spawnWave();
-      }
-      if (mobsKilled >= mobsNeeded && !prev.bossSpawned) {
-        spawnBoss();
-      }
-      if (prev.bossSpawned && entitiesCount === 0) {
-        return { ...prev, state: "CLEARED" };
+      if (nextPhase === 'CREEPS') {
+        if (entitiesCount < 4 && mobsKilled + entitiesCount < mobsNeeded) {
+          spawnWave();
+        }
+        if (mobsKilled >= mobsNeeded) {
+          nextPhase = 'SUB_BOSSES';
+          const totalBosses = getBossCount(prev.stage);
+          // if there are 4+ bosses, spawn 2 as sub-bosses first. If 8, spawn 4, etc. Otherwise spawn 1.
+          const subBossCount = totalBosses >= 4 ? Math.floor(totalBosses / 2) : 1;
+          spawnSubBosses(subBossCount, prev.stage);
+        }
+      } else if (nextPhase === 'SUB_BOSSES') {
+        if (entitiesCount === 0) {
+          nextPhase = 'FINAL_BOSS';
+          bossSpawned = true;
+          const totalBosses = getBossCount(prev.stage);
+          const finalBossCount = totalBosses >= 4 ? Math.ceil(totalBosses / 2) : totalBosses;
+          spawnFinalBosses(finalBossCount, prev.stage);
+        }
+      } else if (nextPhase === 'FINAL_BOSS') {
+        if (entitiesCount === 0 && bossSpawned) {
+          return { ...prev, state: "CLEARED" };
+        }
       }
 
       // Auto target
@@ -307,11 +430,18 @@ export default function GameCanvas({
 
       // Auto-cast highest available skill
       if (prev.auto && p.target && !p.dead) {
-        for (let idx = newSkills.length - 1; idx >= 0; idx--) {
-          const sk = newSkills[idx];
-          if (sk.level > 0 && sk.cooldownLeft <= 0 && p.mp >= sk.manaCost) {
-            firedSkillIdx = idx;
-            break;
+        const targetEntity = entitiesRef.current.find(e => e.id === p.target?.id);
+        if (targetEntity) {
+          const distanceToTarget = Math.hypot(p.x - targetEntity.x, p.y - targetEntity.y);
+          for (let idx = newSkills.length - 1; idx >= 0; idx--) {
+            const sk = newSkills[idx];
+            const actualRange = sk.range + (buffs.skillRangeBonus || 0);
+            
+            // Chí mạng: Chỉ xả tuyệt chiêu khi đối tượng đã nằm vào trong tầm sát thương
+            if (sk.level > 0 && sk.cooldownLeft <= 0 && p.mp >= sk.manaCost && distanceToTarget <= actualRange + 30) {
+              firedSkillIdx = idx;
+              break;
+            }
           }
         }
       }
@@ -321,14 +451,15 @@ export default function GameCanvas({
         sk.cooldownLeft = sk.cooldown * (1 - buffs.cdReduc);
         p.mp -= sk.manaCost;
 
-        const tx = p.target ? p.target.x : p.x + p.facing * 100;
+        const tx = p.target ? p.target.x : p.x + p.facing * 120;
         const ty = p.target ? p.target.y : p.y;
         
-        shakeRef.current = (firedSkillIdx + 1) * 6;
+        shakeRef.current = (firedSkillIdx + 1) * 7;
+        const actualRange = sk.range + (buffs.skillRangeBonus || 0);
         
         // Base shockwave and ring
         particlesRef.current.push({
-          x: tx, y: ty, vx: 0, vy: 0, life: 0.5 + firedSkillIdx * 0.2, maxLife: 0.5 + firedSkillIdx * 0.2, color: sk.color, size: 10, type: 'ring'
+          x: tx, y: ty, vx: 0, vy: 0, life: 0.5 + firedSkillIdx * 0.15, maxLife: 0.5 + firedSkillIdx * 0.15, color: sk.color, size: 10, type: 'ring'
         });
         particlesRef.current.push({
           x: tx, y: ty, vx: 0, vy: 0, life: 0.3, maxLife: 0.3, color: '#ffffff', size: 5, type: 'shockwave'
@@ -351,13 +482,13 @@ export default function GameCanvas({
         } else if (firedSkillIdx === 1) {
           // Tier 2: Pillar and falling swords
           particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 0.6, maxLife: 0.6, color: sk.color, size: sk.range / 3, type: 'pillar'
+            x: tx, y: ty, vx: 0, vy: 0, life: 0.6, maxLife: 0.6, color: sk.color, size: actualRange / 3, type: 'pillar'
           });
           for (let i = 0; i < 8; i++) {
              particlesRef.current.push({
-                x: tx + (Math.random() - 0.5) * sk.range, 
+                x: tx + (Math.random() - 0.5) * actualRange, 
                 y: ty - 300 - Math.random() * 200, 
-                vx: 0, vy: 800 + Math.random() * 400, // fall fast
+                vx: 0, vy: 800 + Math.random() * 400,
                 life: 0.8,
                 color: sk.color,
                 size: 15 + Math.random() * 10,
@@ -368,7 +499,7 @@ export default function GameCanvas({
         } else if (firedSkillIdx === 2) {
           // Tier 3: Ultimate explosion
           particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 1, maxLife: 1, color: sk.color, size: sk.range / 1.5, type: 'pillar'
+            x: tx, y: ty, vx: 0, vy: 0, life: 1, maxLife: 1, color: sk.color, size: actualRange / 1.5, type: 'pillar'
           });
           particlesRef.current.push({
             x: tx, y: ty, vx: 0, vy: 0, life: 0.8, maxLife: 0.8, color: '#ffffff', size: 10, type: 'ring'
@@ -388,7 +519,7 @@ export default function GameCanvas({
           }
           for (let i = 0; i < 15; i++) {
              particlesRef.current.push({
-                x: tx + (Math.random() - 0.5) * sk.range * 1.5, 
+                x: tx + (Math.random() - 0.5) * actualRange * 1.5, 
                 y: ty - 400 - Math.random() * 300, 
                 vx: 0, vy: 1000 + Math.random() * 500,
                 life: 1,
@@ -398,22 +529,74 @@ export default function GameCanvas({
                 rotation: Math.random() * 0.4 - 0.2
              });
           }
+        } else if (firedSkillIdx === 3) {
+          // Tier 4: Laser Beam Energy Sweep
+          for (let sweep = -30; sweep <= 30; sweep += 15) {
+             particlesRef.current.push({
+               x: tx, y: ty + sweep, vx: 0, vy: 0, life: 0.5, maxLife: 0.5, color: sk.color, size: 25, type: 'beam'
+             });
+          }
+          for (let i = 0; i < 20; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            particlesRef.current.push({
+              x: tx + (Math.random() - 0.5) * actualRange, y: ty + (Math.random() - 0.5) * 40,
+              vx: Math.cos(ang) * 150, vy: Math.sin(ang) * 150,
+              life: 0.4, color: '#ffffff', size: 3, type: 'trail'
+            });
+          }
+        } else if (firedSkillIdx === 4) {
+          // Tier 5: Celestial Lightning Storm
+          for (let i = 0; i < 5; i++) {
+             const offsetAngle = Math.random() * Math.PI * 2;
+             const offsetDist = Math.random() * actualRange * 0.8;
+             const lx = tx + Math.cos(offsetAngle) * offsetDist;
+             const ly = ty + Math.sin(offsetAngle) * offsetDist;
+             particlesRef.current.push({
+               x: lx, y: ly, vx: 0, vy: 0, life: 0.4, maxLife: 0.4, color: '#3498db', size: 8, type: 'lightning'
+             });
+          }
+        } else if (firedSkillIdx === 5) {
+          // Tier 6: Supreme Gold Dragon Vortex
+          particlesRef.current.push({
+            x: tx, y: ty, vx: 0, vy: 0, life: 1.5, maxLife: 1.5, color: '#f1c40f', size: actualRange, type: 'ring'
+          });
+          particlesRef.current.push({
+            x: tx, y: ty, vx: 0, vy: 0, life: 1.2, maxLife: 1.2, color: '#e67e22', size: actualRange * 0.7, type: 'ring'
+          });
+          for (let i = 0; i < 60; i++) {
+            const spinA = Math.random() * Math.PI * 2;
+            const radius = Math.random() * actualRange;
+            const pxPos = tx + Math.cos(spinA) * radius;
+            const pyPos = ty + Math.sin(spinA) * radius;
+            // orbital velocity vector
+            const vx = -Math.sin(spinA) * 200;
+            const vy = Math.cos(spinA) * 200;
+            particlesRef.current.push({
+              x: pxPos, y: pyPos, vx, vy, life: 0.8 + Math.random() * 0.4, color: Math.random() > 0.5 ? '#f1c40f' : '#e74c3c', size: 4 + Math.random() * 4, type: 'trail'
+            });
+          }
         }
         
-        const damage = (sk.baseDamage + sk.level * 20 + p.currentStats.int * 5) * buffs.dmgMult;
+        const damage = (sk.baseDamage + sk.level * 25 + p.currentStats.int * 5) * buffs.dmgMult;
         
         entitiesRef.current.forEach(e => {
           const dist = Math.hypot(e.x - tx, e.y - ty);
-          if (dist <= sk.range) {
-            const d = Math.floor(damage * (0.8 + Math.random() * 0.4));
+          if (dist <= actualRange) {
+            // High-tier Agi driven Crits ! (Base Chance: 10% + AGI stats * 0.5%)
+            const isCrit = Math.random() < (0.10 + p.currentStats.agi * 0.005);
+            let d = Math.floor(damage * (0.8 + Math.random() * 0.4));
+            if (isCrit) {
+              const critDb = buffs.critDmgMult || 1.5;
+              d = Math.floor(d * critDb);
+            }
             e.hp -= d;
             textsRef.current.push({
               id: Math.random(),
               x: e.x + (Math.random() - 0.5) * 20,
               y: e.y - 20 - Math.random() * 20,
-              text: `-${d}`,
-              color: sk.color,
-              life: 1.5
+              text: isCrit ? `💥 CHÍ MẠNG! -${d}` : `-${d}`,
+              color: isCrit ? '#f1c40f' : sk.color,
+              life: isCrit ? 1.8 : 1.5
             });
           }
         });
@@ -421,15 +604,17 @@ export default function GameCanvas({
 
 
       // Item Pickup
+      let goldEarned = 0;
       for (let i = dropsRef.current.length - 1; i >= 0; i--) {
         const d = dropsRef.current[i];
         if (Math.hypot(p.x - d.x, p.y - d.y) < 50) {
-          equipItem(d, p, buffs, prev.stage);
+          const goldVal = equipItem(d, p, buffs, prev.stage);
+          goldEarned += goldVal;
           dropsRef.current.splice(i, 1);
         }
       }
 
-      return { ...prev, player: p, skills: newSkills };
+      return { ...prev, player: p, skills: newSkills, gold: prev.gold + goldEarned, stagePhase: nextPhase, bossSpawned };
     });
 
     // Sub-updates for refs
@@ -498,11 +683,17 @@ export default function GameCanvas({
 
       setStateAsync((prev) => {
         if (!prev) return null;
+        // Thiết kế tinh tế: Giảm thiểu lạm phát vàng ở các stage sau bằng Gold Decay và nén cơ số tích luỹ
+        const goldDecayFactor = prev.stage > 12 
+          ? Math.max(0.12, 1 - (prev.stage - 12) * 0.04) 
+          : 1.0;
+          
         const goldGain = Math.floor(
           (e.isBoss ? 50 : 5) *
-            Math.pow(1.2, prev.stage) *
+            Math.pow(1.11, prev.stage) * // Giảm nhẹ từ 1.2 xuống 1.11 tránh over-power
             prev.buffs.resMult *
-            prev.buffs.rlGold,
+            prev.buffs.rlGold *
+            goldDecayFactor
         );
         const expGain =
           (e.isBoss ? 100 : 15) *
@@ -555,25 +746,32 @@ export default function GameCanvas({
     stage: number,
   ) => {
     let roll = Math.random();
-    if (isBoss) roll *= 0.3;
+    if (isBoss) roll *= 0.15; // Better drops for bosses!
 
     let rIdx = 0;
-    if (roll < 0.02) rIdx = 4;
-    else if (roll < 0.1) rIdx = 3;
-    else if (roll < 0.3) rIdx = 2;
-    else if (roll < 0.6) rIdx = 1;
+    if (roll < 0.01) rIdx = 7;      // pink (1%)
+    else if (roll < 0.035) rIdx = 6; // crimson (2.5%)
+    else if (roll < 0.08) rIdx = 5;  // gold_rarity (4.5%)
+    else if (roll < 0.15) rIdx = 4;  // emerald (7%)
+    else if (roll < 0.28) rIdx = 3;  // legendary (13%)
+    else if (roll < 0.45) rIdx = 2;  // epic (17%)
+    else if (roll < 0.70) rIdx = 1;  // rare (25%)
+    else rIdx = 0;                  // common
 
-    const types: ("weapon" | "armor" | "accessory" | "special")[] = [
+    const types: EquipmentType[] = [
       "weapon",
       "armor",
       "accessory",
       "special",
+      "horse",
+      "cloak",
+      "seal",
+      "banner",
     ];
-    const type = types[Math.floor(Math.random() * 4)];
-    const rarity = (
-      ["common", "rare", "epic", "legendary", "mythical"] as const
-    )[rIdx];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const rarity = RARITIES[rIdx];
     const power = stage * RARITY_MULTIPLIERS[rarity];
+    const name = EQUIPMENT_NAME_MAP[type][rarity] || "Vô Danh Bảo Vật";
 
     dropsRef.current.push({
       id: Math.random(),
@@ -582,7 +780,7 @@ export default function GameCanvas({
       type,
       rarity,
       power,
-      name: WEAPON_NAMES[rIdx],
+      name,
     });
   };
 
@@ -591,7 +789,7 @@ export default function GameCanvas({
     p: GameState["player"],
     buffs: GameState["buffs"],
     stage: number,
-  ) => {
+  ): number => {
     const current = p.equipment[item.type];
     if (!current || item.power > current.power) {
       p.equipment[item.type] = {
@@ -603,12 +801,31 @@ export default function GameCanvas({
 
       // Recalc stats buffs
       const eq = p.equipment;
+      
+      // Weapon (VJ) -> DMG
       buffs.dmgMult = 1 + (eq.weapon ? eq.weapon.power * 0.1 : 0);
+      
+      // Armor (GIÁP) -> HP
       buffs.hpMult = 1 + (eq.armor ? eq.armor.power * 0.05 : 0);
-      buffs.cdReduc = eq.accessory
-        ? Math.min(0.5, eq.accessory.power * 0.02)
-        : 0;
+      
+      // Accessory (💍) & Horse (🐴) -> CD reduction
+      const cdBonus = (eq.accessory ? eq.accessory.power * 0.02 : 0) + (eq.horse ? eq.horse.power * 0.01 : 0);
+      buffs.cdReduc = Math.min(0.75, cdBonus);
+      
+      // Special (🔮) -> Resistance (resMult)
       buffs.resMult = 1 + (eq.special ? eq.special.power * 0.1 : 0);
+      
+      // Movement speed -> Horse (🐴) adds direct speed
+      const speedBonus = eq.horse ? eq.horse.power * 4 : 0;
+      p.speed = 160 + p.currentStats.agi * 5 + speedBonus;
+      
+      // Cloak (🧥) -> Crit DMG Multiplier
+      const critDmgBonus = eq.cloak ? eq.cloak.power * 0.03 : 0;
+      buffs.critDmgMult = 1.5 + critDmgBonus;
+      
+      // Seal (🔏) -> Skill range bonus
+      const rangeBonus = eq.seal ? eq.seal.power * 2.5 : 0;
+      buffs.skillRangeBonus = rangeBonus;
 
       const newMaxHp = Math.floor(
         (100 + p.currentStats.con * 20) * buffs.hpMult,
@@ -617,6 +834,22 @@ export default function GameCanvas({
       p.atk = Math.floor((10 + p.currentStats.str * 3) * buffs.dmgMult);
 
       addNotification(`Nhặt được [${item.name}]`, RARITY_COLORS[item.rarity]);
+      return 0;
+    } else {
+      // Recycles to gold based on rarity and stage
+      const baseRecycles = {
+        common: 10,
+        rare: 30,
+        epic: 80,
+        legendary: 200,
+        emerald: 500,
+        gold_rarity: 1200,
+        crimson: 3000,
+        pink: 8000,
+      };
+      const recycleVal = Math.floor((baseRecycles[item.rarity] || 10) * (1 + stage * 0.12));
+      addNotification(`Thu hồi [${item.name}] phế phẩm, nhận +${recycleVal} Vàng`, "#f1c40f");
+      return recycleVal;
     }
   };
 
@@ -637,16 +870,24 @@ export default function GameCanvas({
     if (!ctx) return;
 
     const p = stateRef.current.player;
-    cameraRef.current.x += (p.x - canvas.width / 2 - cameraRef.current.x) * 0.1;
-    cameraRef.current.y +=
-      (p.y - canvas.height / 2 - cameraRef.current.y) * 0.1;
+    const zoom = canvas.width < 768 ? 0.72 : 0.84;
+    const viewWidth = canvas.width / zoom;
+    const viewHeight = canvas.height / zoom;
 
-    const cx = cameraRef.current.x + (Math.random() - 0.5) * shakeRef.current;
-    const cy = cameraRef.current.y + (Math.random() - 0.5) * shakeRef.current;
+    cameraRef.current.x += (p.x - viewWidth / 2 - cameraRef.current.x) * 0.1;
+    cameraRef.current.y +=
+      (p.y - viewHeight / 2 - cameraRef.current.y) * 0.1;
+
+    const cx = cameraRef.current.x + (Math.random() - 0.5) * (shakeRef.current / zoom);
+    const cy = cameraRef.current.y + (Math.random() - 0.5) * (shakeRef.current / zoom);
 
     // Background: Grassy Field
     ctx.fillStyle = "#0c170e"; // Very dark green grass
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Zoom the entire world representation
+    ctx.save();
+    ctx.scale(zoom, zoom);
 
     // World coordinate grid / Grass details
     ctx.save();
@@ -657,8 +898,8 @@ export default function GameCanvas({
     // Determine bounds in world space to draw only what's visible
     const startX = Math.floor(cx / tileSize) * tileSize - tileSize;
     const startY = Math.floor(cy / tileSize) * tileSize - tileSize;
-    const endX = cx + canvas.width + tileSize;
-    const endY = cy + canvas.height + tileSize;
+    const endX = cx + viewWidth + tileSize;
+    const endY = cy + viewHeight + tileSize;
 
     ctx.translate(-cx, -cy);
 
@@ -666,11 +907,11 @@ export default function GameCanvas({
     ctx.beginPath();
     for (let x = startX; x <= endX; x += tileSize) {
       ctx.moveTo(x, cy - tileSize);
-      ctx.lineTo(x, cy + canvas.height + tileSize);
+      ctx.lineTo(x, cy + viewHeight + tileSize);
     }
     for (let y = startY; y <= endY; y += tileSize) {
       ctx.moveTo(cx - tileSize, y);
-      ctx.lineTo(cx + canvas.width + tileSize, y);
+      ctx.lineTo(cx + viewWidth + tileSize, y);
     }
     ctx.globalAlpha = 0.3; // Make grid subtle
     ctx.stroke();
@@ -701,8 +942,8 @@ export default function GameCanvas({
       if (
         sx < -100 ||
         sy < -100 ||
-        sx > canvas.width + 100 ||
-        sy > canvas.height + 100
+        sx > viewWidth + 100 ||
+        sy > viewHeight + 100
       )
         return;
 
@@ -889,6 +1130,32 @@ export default function GameCanvas({
         ctx.arc(px, py, par.size, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
+      } else if (par.type === 'beam') {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1, par.size * (par.life / 0.8) * 1.8);
+        ctx.shadowColor = par.color;
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.moveTo(px - 1000, py);
+        ctx.lineTo(px + 1000, py);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      } else if (par.type === 'lightning') {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5 + Math.random() * 3;
+        ctx.shadowColor = par.color;
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.moveTo(px, py - 500);
+        let cyy = py - 500;
+        let cxx = px;
+        while (cyy < py) {
+          cyy += 30 + Math.random() * 40;
+          cxx += (Math.random() - 0.5) * 50;
+          ctx.lineTo(cxx, cyy);
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0;
       } else {
         // Default dot
         ctx.fillStyle = par.color;
@@ -918,8 +1185,8 @@ export default function GameCanvas({
       if (
         ex < -50 ||
         ey < -50 ||
-        ex > canvas.width + 50 ||
-        ey > canvas.height + 50
+        ex > viewWidth + 50 ||
+        ey > viewHeight + 50
       )
         return;
 
@@ -957,12 +1224,39 @@ export default function GameCanvas({
     if (!p.dead) {
       const px = p.x - cx;
       const py = p.y - cy;
+
+      // Banner aura passive battlefield design
+      if (p.equipment.banner !== null) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(243, 156, 18, 0.5)"; // Golden standard flame aura
+        ctx.lineWidth = 3.5;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#f39c12";
+        ctx.beginPath();
+        ctx.ellipse(px, py + p.radius, 160, 64, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.translate(px, py + p.radius);
+        ctx.rotate((time * 0.002) % (Math.PI * 2));
+        ctx.strokeStyle = "rgba(243, 156, 18, 0.15)";
+        ctx.strokeRect(-160, -64, 323, 128);
+        ctx.restore();
+
+        // Banner text flag floating tag
+        ctx.save();
+        ctx.font = "bold 13px font-serif";
+        ctx.fillStyle = "#f39c12";
+        ctx.textAlign = "center";
+        ctx.fillText("🚩 QUÂN KỲ", px, py - 38);
+        ctx.restore();
+      }
+
       ctx.strokeStyle = p.color + "88";
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.ellipse(px, py + p.radius, 25, 10, 0, 0, Math.PI * 2);
       ctx.stroke();
-      drawHuman(ctx, px, py, 18, p.color, p.facing, false, p.moving, time);
+      drawHuman(ctx, px, py, 18, p.color, p.facing, false, p.moving, time, p.equipment.cloak !== null);
     }
 
     // Floating Texts
@@ -975,10 +1269,13 @@ export default function GameCanvas({
     });
     ctx.globalAlpha = 1;
 
+    ctx.restore(); // Restore from game-world zoom transformation
+
     // Mini Map
-    const mmSize = 120;
-    const mmX = canvas.width - mmSize - 20;
-    const mmY = 120;
+    const isMobile = canvas.width < 768;
+    const mmSize = isMobile ? 80 : 120;
+    const mmX = isMobile ? 12 : 32;
+    const mmY = isMobile ? 95 : 115;
 
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.strokeStyle = "rgba(212,175,55,0.5)";
@@ -1029,9 +1326,44 @@ export default function GameCanvas({
   const handlePointerDown = (e: PointerEvent) => {
     const canvas = canvasRef.current;
     if (!canvas || stateRef.current.player.dead || e.target !== canvas) return;
+    pointerDownRef.current = true;
+    startPointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (err) {}
+    updateMovementTarget(e);
+  };
+
+  const handlePointerMove = (e: PointerEvent) => {
+    if (!pointerDownRef.current || !startPointerRef.current) return;
+    const distanceThreshold = Math.hypot(e.clientX - startPointerRef.current.clientX, e.clientY - startPointerRef.current.clientY);
+    
+    // Ngưỡng 18 pixels phân tách click đơn kiên định và drag rê rổ
+    if (distanceThreshold > 18) {
+      updateMovementTarget(e, true);
+    }
+  };
+
+  const handlePointerUp = (e: PointerEvent) => {
+    if (pointerDownRef.current) {
+      pointerDownRef.current = false;
+      startPointerRef.current = null;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        try {
+          canvas.releasePointerCapture(e.pointerId);
+        } catch (err) {}
+      }
+    }
+  };
+
+  const updateMovementTarget = (e: PointerEvent, isMove = false) => {
+    const canvas = canvasRef.current;
+    if (!canvas || stateRef.current.player.dead) return;
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left + cameraRef.current.x;
-    const my = e.clientY - rect.top + cameraRef.current.y;
+    const zoom = canvas.width < 768 ? 0.72 : 0.84;
+    const mx = (e.clientX - rect.left) / zoom + cameraRef.current.x;
+    const my = (e.clientY - rect.top) / zoom + cameraRef.current.y;
 
     const hit = entitiesRef.current.find(
       (ent) => Math.hypot(mx - ent.x, my - ent.y) < ent.size + 15,
@@ -1041,16 +1373,18 @@ export default function GameCanvas({
       if (!prev) return null;
 
       // Visual feedback for click
-      particlesRef.current.push({
-        x: mx,
-        y: my,
-        vx: 0,
-        vy: 0,
-        life: 0.5,
-        color: "rgba(212,175,55,0.8)",
-        size: 10,
-        isBlast: true,
-      });
+      if (!isMove) {
+        particlesRef.current.push({
+          x: mx,
+          y: my,
+          vx: 0,
+          vy: 0,
+          life: 0.5,
+          color: "rgba(212,175,55,0.8)",
+          size: 10,
+          isBlast: true,
+        });
+      }
 
       if (hit) {
         return {
@@ -1090,6 +1424,9 @@ export default function GameCanvas({
     <canvas
       ref={canvasRef}
       onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       className="block cursor-crosshair"
     />
   );

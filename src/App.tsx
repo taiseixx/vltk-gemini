@@ -62,15 +62,27 @@ export default function App() {
       color: sect.color
     }));
 
+    const getBossCount = (stage: number): number => {
+      if (stage < 10) return 1;
+      const exp = Math.floor(stage / 10);
+      return Math.pow(2, exp);
+    };
+    const getMobsTotal = (stage: number): number => {
+      const baseMobs = 10 + stage * 2;
+      const bosses = getBossCount(stage);
+      return baseMobs + bosses * 24;
+    };
+
     const initialState: GameState = {
       state: 'PLAYING',
       stage: 1,
       lives: 2,
       gold: 0,
       exp: 0,
-      mobsTotal: 10,
+      mobsTotal: getMobsTotal(1),
       mobsKilled: 0,
       bossSpawned: false,
+      stagePhase: 'CREEPS',
       auto: true,
       player: {
         x: MAP_SIZE / 2,
@@ -100,7 +112,11 @@ export default function App() {
           weapon: null,
           armor: null,
           accessory: null,
-          special: null
+          special: null,
+          horse: null,
+          cloak: null,
+          seal: null,
+          banner: null
         }
       },
       buffs: {

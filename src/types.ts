@@ -1,5 +1,5 @@
 
-export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythical';
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'emerald' | 'gold_rarity' | 'crimson' | 'pink';
 
 export interface Sect {
   id: string;
@@ -29,11 +29,14 @@ export interface Skill {
   color: string;
 }
 
+export type EquipmentType = 'weapon' | 'armor' | 'accessory' | 'special' | 'horse' | 'cloak' | 'seal' | 'banner';
+
 export interface Equipment {
-  type: 'weapon' | 'armor' | 'accessory' | 'special';
+  type: EquipmentType;
   rarity: Rarity;
   power: number;
   name: string;
+  tier?: number;
 }
 
 export interface Entity {
@@ -49,6 +52,7 @@ export interface Entity {
   color: string;
   isBoss: boolean;
   name?: string;
+  isSubBoss?: boolean;
 }
 
 export interface Particle {
@@ -61,7 +65,7 @@ export interface Particle {
   color: string;
   size: number;
   isBlast?: boolean;
-  type?: 'dot' | 'blast' | 'ring' | 'pillar' | 'sword' | 'trail' | 'text' | 'shockwave';
+  type?: 'dot' | 'blast' | 'ring' | 'pillar' | 'sword' | 'trail' | 'text' | 'shockwave' | 'beam' | 'lightning';
   rotation?: number;
   vr?: number;
 }
@@ -79,10 +83,11 @@ export interface Drop {
   id: number;
   x: number;
   y: number;
-  type: 'weapon' | 'armor' | 'accessory' | 'special';
+  type: EquipmentType;
   rarity: Rarity;
   power: number;
   name: string;
+  tier?: number;
 }
 
 export interface GameState {
@@ -94,6 +99,7 @@ export interface GameState {
   mobsTotal: number;
   mobsKilled: number;
   bossSpawned: boolean;
+  stagePhase: 'CREEPS' | 'SUB_BOSSES' | 'FINAL_BOSS';
   auto: boolean;
   
   player: {
@@ -125,6 +131,10 @@ export interface GameState {
       armor: Equipment | null;
       accessory: Equipment | null;
       special: Equipment | null;
+      horse: Equipment | null;
+      cloak: Equipment | null;
+      seal: Equipment | null;
+      banner: Equipment | null;
     };
   };
 
@@ -136,6 +146,8 @@ export interface GameState {
     rlGold: number;
     rlExp: number;
     rlExec: number;
+    critDmgMult?: number;
+    skillRangeBonus?: number;
   };
 
   skills: Skill[];
