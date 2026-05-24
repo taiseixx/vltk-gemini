@@ -103,15 +103,15 @@ Mỗi sub-checkpoint là một commit riêng. Phải đảm bảo gameplay khôn
 
 ## 11. Final Verification
 
-- [ ] 11.1 `npm run lint && npm run build` pass
-- [ ] 11.2 Smoke test full: 2 sects (1 melee Thiếu Lâm, 1 ranged Đường Môn), each play stage 1 → 10
-- [ ] 11.3 So sánh FPS với screenshot pre-cleanup — phải tương đương (±5%)
-- [ ] 11.4 Compare 5 screenshot mốc với pre-cleanup — visual parity
-- [ ] 11.5 Verify save/load: clear save, chơi 1 stage, refresh, click "tiếp tục" → state khôi phục đúng (đây là behavior cũ, phase này không thay đổi)
-- [ ] 11.6 `npm ls` không list `@google/genai`, `pixi.js`, `@pixi/react`, `pixi-filters`
-- [ ] 11.7 `wc -l src/components/GameCanvas.tsx` ≤ 400
-- [ ] 11.8 Tag commit cuối là `post-cleanup-and-split`
-- [ ] 11.9 Tạo PR / merge vào main
+- [x] 11.1 `npm run lint && npm run build` pass — verified at CP10
+- [~] 11.2 Smoke test full BYPASSED per user instruction
+- [~] 11.3 FPS comparison BYPASSED (no pre-cleanup baseline screenshots)
+- [~] 11.4 Visual parity comparison BYPASSED (no pre-cleanup baseline)
+- [~] 11.5 Save/load behavior unchanged by this refactor (not touched)
+- [x] 11.6 `npm ls @google/genai pixi.js @pixi/react pixi-filters` → empty, confirmed dropped
+- [~] 11.7 `wc -l src/components/GameCanvas.tsx` = **2297**, target ≤ 400 NOT met. Defer to follow-up change.
+- [x] 11.8 Tag commit cuối là `post-cleanup-and-split` — done, pushed.
+- [ ] 11.9 Tạo PR vào main
 
 ## 12. Post-merge
 
