@@ -1,7 +1,9 @@
-# ⚔️ Jianghu Hustle: The Roguelite Run
+<p align="center">
+  <strong>⚔️ Jianghu Hustle: The Roguelite Run</strong>
+</p>
 
 <p align="center">
-  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_women_banner_1779373260490.png" alt="Võ Lâm Giang Hồ Banner 1" width="100%">
+  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_women_banner_1779373260490.png" alt="Võ Lâm Giang Hồ Banner 1" width="75%">
 </p>
 
 ---
@@ -9,7 +11,7 @@
 **Jianghu Hustle: The Roguelite Run** is an old-school Wuxia-style roguelite. It smashes traditional martial arts flair (sects, secret manuals, shiny loot) into an unpredictable, never-the-same-run-twice dungeon-crawling grinder. 
 
 <p align="center">
-  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_cb_banner_1779383151501.png" alt="Võ Lâm Giang Hồ Banner 2" width="100%">
+  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_cb_banner_1779383151501.png" alt="Võ Lâm Giang Hồ Banner 2" width="60%">
 </p>
 
 ---
@@ -26,11 +28,11 @@
 * **Open-World AI Shenanigans:** Hooked up with **Gemini API** on the server side to throw random, unhinged Jianghu events at you. The world is alive and fully prepared to troll you.
 
 <p align="center">
-  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_nm_banner_1779383219739.png" alt="Võ Lâm Giang Hồ Banner 3" width="100%">
+  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_nm_banner_1779383219739.png" alt="Võ Lâm Giang Hồ Banner 3" width="60%">
 </p>
 
 <p align="center">
-  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_feminine_elegance_1779382251364.png" alt="Võ Lâm Giang Hồ Banner 5" width="100%">
+  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_feminine_elegance_1779382251364.png" alt="Võ Lâm Giang Hồ Banner 5" width="60%">
 </p>
 
 ---
