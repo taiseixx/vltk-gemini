@@ -12,9 +12,14 @@
 Stack   : React 18 + Vite + Custom HTML5 2D Canvas Engine
 Theme   : Võ Lâm Truyền Kỳ (Vuxia) — Đầy đủ Thập Đại Phái chính tông
 Genre   : Roguelite Auto-combat Survivor — Vượt ải dọn quái, chiêu hộ Đồng Hành, săn Trang Bị, tu luyện Bí Kíp.
-AI      : Google Gemini API Server-proxy (`/api/encounter`) — Tự động sinh cuộc Kỳ Ngộ ngẫu nhiên.
+AI      : NOT YET INTEGRATED. `/api/encounter` currently returns locally pre-configured data (see server.ts). Real Gemini API server-proxy is forward-declared via metadata.json but not yet wired up.
 Linter  : ESLint (`npm run lint` / `tsc --noEmit` check loại bỏ type-error trước khi build)
 RNG     : Seeded/Simple RNG với State Auto-save & Load tức thời qua LocalStorage
+Layout  : 3-layer architecture (post cleanup-and-split):
+          - src/components/ — React glue only
+          - src/render/     — Canvas2D drawing (imageProcessing, imageCache, spriteLoader, character, world)
+          - src/game/       — pure TS game logic (elements, spawn) + per-tick systems (game/systems/: companion, movement, drops, effects)
+          Boundary rules: render/* must NOT import from react or game/. game/* must NOT import from react, render/, or touch Canvas APIs.
 ```
 
 ---

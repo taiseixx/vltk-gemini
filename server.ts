@@ -111,7 +111,11 @@ async function startServer() {
     const sectId = gameState?.player?.sectId || 'Vô Danh';
     const stage = gameState?.stage || 1;
 
-    // Direct return of pre-configured local encounters (avoids LLM token cost)
+    // NOTE: This endpoint currently returns locally pre-configured
+    // encounters only. Real Gemini integration is forward-declared via
+    // the MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API flag in metadata.json
+    // but NOT yet wired up. Insertion point for Gemini call goes here.
+    // See: cleanup-and-split change in openspec/.
     return res.json(getLocalEncounters(sectId, stage));
   });
 

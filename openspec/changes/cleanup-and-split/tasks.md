@@ -86,21 +86,19 @@ Mỗi sub-checkpoint là một commit riêng. Phải đảm bảo gameplay khôn
 
 ## 9. Checkpoint 8 — GameCanvas chỉ còn React glue
 
-- [ ] 9.1 Đếm dòng `wc -l src/components/GameCanvas.tsx` — phải ≤ 400
-- [ ] 9.2 Đọc lại file, verify chỉ còn: imports, props interface, hooks (useRef, useState), useEffect setup (sprite load, RAF schedule, resize, keydown), pointer handlers, return JSX
-- [ ] 9.3 Nếu vẫn còn business logic, identify và move tiếp
-- [ ] 9.4 `npm run lint && npm run build` pass
-- [ ] 9.5 Commit `refactor: GameCanvas reduced to React glue (<400 lines)`
+- [~] 9.1 Đếm dòng `wc -l src/components/GameCanvas.tsx` — hiện **2297** dòng. Mục tiêu ≤ 400 KHÔNG đạt vì combat/skills/render passes chưa tách. Defer sang change tiếp theo.
+- [~] 9.2 GameCanvas vẫn còn: pixel-level update() god function (~700 dòng), render() (~900 dòng), doDamage helper, equipItem helper, drawTerrain/drawScenery inline. Đã giảm từ 3260 → 2297 (-963 dòng = -29.5%).
+- [~] 9.3 Sẽ tách tiếp trong change `extract-game-systems-phase2` (chưa tạo).
+- [x] 9.4 `npm run lint && npm run build` pass — verified at end of CP8.
+- [~] 9.5 Commit này được merge vào CP10 final docs commit.
 
 ## 10. Checkpoint 9 — Documentation & boundary verification
 
-- [ ] 10.1 Sửa `README.md`: thay phần Gemini banner và "Set the GEMINI_API_KEY..." bằng disclaimer trung thực: endpoint `/api/encounter` hiện trả về local data
-- [ ] 10.2 Sửa `server.ts`: comment ở `/api/encounter` handler ghi rõ "Returns locally pre-configured encounters. Real Gemini integration not yet wired — insertion point marked TODO."
-- [ ] 10.3 Sửa `AGENT.md` section 0 TL;DR để phản ánh:
-  - `AI: not yet integrated — /api/encounter returns local pre-configured data`
-  - Cấu trúc thư mục mới (render/, game/, game/systems/)
-- [ ] 10.4 Thêm note disclosure trong `README.md` HOẶC `AGENT.md` về `MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API` flag trong metadata.json (forward declaration vs current impl)
-- [ ] 10.5 Boundary check manual: `grep -r "from 'react'" src/render/ src/game/` zero matches, `grep -rE "import.*from.*'.*render" src/game/` zero matches, `grep -rE "getContext\|CanvasRenderingContext2D" src/game/` zero matches
+- [x] 10.1 Sửa `README.md`: thay banner AI Studio + GEMINI_API_KEY step bằng status disclaimer trung thực — endpoint `/api/encounter` returns local data, architecture overview.
+- [x] 10.2 Sửa `server.ts` comment ở `/api/encounter` handler — ghi rõ "NOT yet wired up. Insertion point for Gemini call goes here."
+- [x] 10.3 Sửa `AGENT.md` TL;DR — AI line nói "NOT YET INTEGRATED" + thêm Layout section mô tả 3-layer + boundary rules.
+- [x] 10.4 README đã include disclosure về MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API forward-declared (line trong README mention metadata.json).
+- [x] 10.5 Boundary check manual: `grep -r "from 'react'" src/render/ src/game/` zero matches, `grep -rE "import.*from.*'.*render" src/game/` zero matches, `grep -rE "getContext\|CanvasRenderingContext2D" src/game/` zero matches — ALL PASS.
 - [ ] 10.6 Commit `docs: align README, server, AGENT.md with current implementation`
 
 ## 11. Final Verification
