@@ -62,6 +62,7 @@ import { getSectIdFromColor, getSectElement, getElementalMultipliers } from "../
 import { getBossCount, getMobsTotal, spawnWave as spawnWavePure, spawnSubBosses as spawnSubBossesPure, spawnFinalBosses as spawnFinalBossesPure } from "../game/spawn";
 import { tickCompanion } from "../game/systems/companion";
 import { tickMobAI } from "../game/systems/movement";
+import { tickParticles, tickFloatingTexts } from "../game/systems/effects";
 
 interface Props {
   gameState: GameState;
@@ -766,30 +767,9 @@ export default function GameCanvas({
     });
 
     // Sub-updates for refs
-    for (let index = particlesRef.current.length - 1; index >= 0; index--) {
-      const p = particlesRef.current[index];
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.life -= dt;
-      if (p.rotation !== undefined && p.vr !== undefined) {
-        p.rotation += p.vr * dt;
-      }
-      if (p.isBlast || p.type === 'ring' || p.type === 'shockwave') {
-        p.size += dt * (p.type === 'shockwave' ? 200 : 100);
-      }
-      if (p.life <= 0) {
-        particlesRef.current.splice(index, 1);
-      }
-    }
+    tickParticles(particlesRef.current, dt);
 
-    for (let index = textsRef.current.length - 1; index >= 0; index--) {
-      const t = textsRef.current[index];
-      t.y -= 40 * dt;
-      t.life -= dt;
-      if (t.life <= 0) {
-        textsRef.current.splice(index, 1);
-      }
-    }
+    tickFloatingTexts(textsRef.current, dt);
 
     if (shakeRef.current > 0) shakeRef.current -= dt * 10;
   };
