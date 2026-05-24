@@ -63,6 +63,7 @@ import { getBossCount, getMobsTotal, spawnWave as spawnWavePure, spawnSubBosses 
 import { tickCompanion } from "../game/systems/companion";
 import { tickMobAI } from "../game/systems/movement";
 import { tickParticles, tickFloatingTexts } from "../game/systems/effects";
+import { tickPickupDrops } from "../game/systems/drops";
 
 interface Props {
   gameState: GameState;
@@ -751,17 +752,11 @@ export default function GameCanvas({
 
 
       // Item Pickup (Wide auto-loot range 180px & +15% gold boost if companion is active)
-      let goldEarned = 0;
-      const pickupRange = prev.companion ? 180 : 50;
-      for (let i = dropsRef.current.length - 1; i >= 0; i--) {
-        const d = dropsRef.current[i];
-        if (Math.hypot(p.x - d.x, p.y - d.y) < pickupRange) {
-          const goldVal = equipItem(d, p, buffs, prev.stage, prev.manuals);
-          const boostedGold = prev.companion ? Math.floor(goldVal * 1.15) : goldVal;
-          goldEarned += boostedGold;
-          dropsRef.current.splice(i, 1);
-        }
-      }
+      const goldEarned = tickPickupDrops(
+        { playerX: p.x, playerY: p.y, hasCompanion: !!prev.companion },
+        dropsRef.current,
+        (d) => equipItem(d, p, buffs, prev.stage, prev.manuals),
+      );
 
       return { ...prev, player: p, skills: newSkills, gold: prev.gold + goldEarned, stagePhase: nextPhase, bossSpawned };
     });
