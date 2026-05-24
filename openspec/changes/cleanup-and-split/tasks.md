@@ -63,12 +63,12 @@
 
 ## 7. Checkpoint 6 — Tách game/elements và game/spawn
 
-- [ ] 7.1 Tạo `src/game/elements.ts`. Move `getSectElement` (dòng 436), `getElementalMultipliers` (dòng 452), `getSectIdFromColor` (dòng 422 — đã unused sau Checkpoint 5, có thể xóa thay vì move; nếu xóa, ghi rõ trong commit)
-- [ ] 7.2 Tạo `src/game/spawn.ts`. Move `getBossCount`, `getMobsTotal`, `spawnWave`, `spawnSubBosses` (dòng 799-...). Convert closures dùng `stateRef`/`particlesRef` thành parameters: `spawnWave(state, entities, particles): Entity[]` returns new entities mảng để caller assign
-- [ ] 7.3 Trong `GameCanvas.tsx`, replace local spawn calls bằng imports + explicit param passing
-- [ ] 7.4 Verify `game/spawn.ts` không có import từ `react` hoặc `render/`
-- [ ] 7.5 `npm run lint && npm run build` pass
-- [ ] 7.6 Smoke test: mob spawn đúng quantity ở stage 1, 10, 20 (kiểm tra scaling formula còn nguyên)
+- [x] 7.1 Tạo `src/game/elements.ts`: `getSectIdFromColor`, `getSectElement`, `getElementalMultipliers` (3 pure functions, all using shared `Element` type)
+- [x] 7.2 Tạo `src/game/spawn.ts`: `getBossCount`, `getMobsTotal`, `spawnWave`, `spawnSubBosses`, `spawnFinalBosses` (incl. `WUXIA_BOSS_NAMES` const). All accept primitives (`stage`, `playerX`, `playerY`) — caller assigns return value + fires notifications.
+- [x] 7.3 GameCanvas: replaced local spawn function bodies with thin wrappers that call the pure version, append to entitiesRef, and fire addNotification. Call sites at lines 520/527/535 unchanged.
+- [x] 7.4 Boundary check passed: `game/*` không import react/render — grep clean
+- [x] 7.5 `npm run lint && npm run build` pass
+- [~] 7.6 Smoke test: BYPASSED per user
 - [ ] 7.7 Commit `refactor: extract spawn and elements into game layer`
 
 ## 8. Checkpoint 7 — Tách game/systems/* lần lượt

@@ -58,6 +58,8 @@ import tnCompImg from "../assets/images/companion_tn_1779612527728.png";
 import { loadAllSprites, SpriteManifest } from "../render/spriteLoader";
 import { drawHuman } from "../render/character";
 import { drawLoadingScreen, drawParticles, drawFloatingTexts } from "../render/world";
+import { getSectIdFromColor, getSectElement, getElementalMultipliers } from "../game/elements";
+import { getBossCount, getMobsTotal, spawnWave as spawnWavePure, spawnSubBosses as spawnSubBossesPure, spawnFinalBosses as spawnFinalBossesPure } from "../game/spawn";
 
 interface Props {
   gameState: GameState;
@@ -251,60 +253,6 @@ export default function GameCanvas({
     });
   };
 
-  const getSectIdFromColor = (color: string): string => {
-    if (color === '#e67e22') return 'sl'; // Thiếu Lâm
-    if (color === '#3498db') return 'vd'; // Võ Đang
-    if (color === '#27ae60') return 'cb'; // Cái Bang
-    if (color === '#e91e63') return 'nm'; // Nga Mi
-    if (color === '#f39c12') return 'cl'; // Côn Lôn
-    if (color === '#9b59b6') return 'nd'; // Ngũ Độc
-    if (color === '#8a2be2') return 'tm'; // Đường Môn
-    if (color === '#00bcd4') return 'ty'; // Thủy Yên/Thúy Yên
-    if (color === '#f44336') return 'tv'; // Thiên Vương
-    if (color === '#d35400') return 'tn'; // Thiên Nhẫn
-    return '';
-  };
-
-  const getSectElement = (sectId: string): 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth' => {
-    const sectElementMap: Record<string, 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'> = {
-      sl: 'Metal',
-      tv: 'Metal',
-      cb: 'Fire',
-      tn: 'Fire',
-      tm: 'Wood',
-      nd: 'Wood',
-      vd: 'Earth',
-      cl: 'Earth',
-      nm: 'Water',
-      ty: 'Water'
-    };
-    return sectElementMap[sectId] || 'Metal';
-  };
-
-  const getElementalMultipliers = (
-    attackerElement: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth',
-    defenderElement?: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'
-  ): { mult: number; text: string; color: string } => {
-    if (!defenderElement) return { mult: 1.0, text: '', color: '' };
-    
-    const elementCounter: Record<'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth', 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'> = {
-      Metal: 'Wood',
-      Wood: 'Earth',
-      Earth: 'Water',
-      Water: 'Fire',
-      Fire: 'Metal'
-    };
-
-    const nameMap = { Metal: 'Kim', Wood: 'Mộc', Water: 'Thủy', Fire: 'Hỏa', Earth: 'Thổ' };
-
-    if (elementCounter[attackerElement] === defenderElement) {
-      return { mult: 1.5, text: `Khắc chế (${nameMap[attackerElement]} ➔ ${nameMap[defenderElement]})`, color: '#f1c40f' };
-    } else if (elementCounter[defenderElement] === attackerElement) {
-      return { mult: 0.7, text: `Bị khắc (${nameMap[attackerElement]} ⇠ ${nameMap[defenderElement]})`, color: '#7f8c8d' };
-    }
-    return { mult: 1.0, text: '', color: '' };
-  };
-
   const resolveSpriteForEntity = (
     color: string,
     isBoss: boolean,
@@ -321,136 +269,26 @@ export default function GameCanvas({
     return { sectId, sprite };
   };
 
-  const getBossCount = (stage: number): number => {
-    if (stage < 10) return 1;
-    const exp = Math.floor(stage / 10);
-    return Math.pow(2, exp);
-  };
-
-  const getMobsTotal = (stage: number): number => {
-    const baseMobs = 10 + stage * 2;
-    const bosses = getBossCount(stage);
-    return baseMobs + bosses * 24;
-  };
-
+  // Wrappers that bridge pure spawn functions back to the local entitiesRef
+  // and addNotification. Signatures match the old in-component spawners so
+  // call sites do not need to change.
   const spawnWave = () => {
-    const stage = stateRef.current.stage;
-    // Scale strength multiplier only on stages 10 and above
-    const strengthMult = stage >= 10 ? (1 + getBossCount(stage) * 0.15) : 1.0;
-    const stage20Boost = stage > 20 ? (1.3 + (stage - 20) * 0.05) : 1.0;
-
-    const hpBase = 24 * Math.pow(1.15, stage - 1) * strengthMult * stage20Boost;
-    const atkBase = 3.2 * Math.pow(1.095, stage - 1) * strengthMult * (stage > 20 ? 1.25 : 1.0);
-    const newEntities: Entity[] = [];
-
-    // Số đợt quái tăng đột khởi dồn dập sau stage 20
-    const spawnCount = stage > 20 ? Math.min(22, 6 + Math.floor((stage - 20) * 1.5)) : 6;
-    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
-
-    for (let i = 0; i < spawnCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 300 + Math.random() * 300;
-      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      newEntities.push({
-        id: Math.random(),
-        isBoss: false,
-        x: stateRef.current.player.x + Math.cos(angle) * dist,
-        y: stateRef.current.player.y + Math.sin(angle) * dist,
-        hp: hpBase,
-        maxHp: hpBase,
-        atk: atkBase,
-        speed: (50 + Math.random() * 30) * (stage > 20 ? 1.3 : 1.0),
-        size: 16,
-        atkCd: 0,
-        color: stage > 20 ? "#8e44ad" : "#7f8c8d",
-        element: el,
-      });
-    }
-    entitiesRef.current = [...entitiesRef.current, ...newEntities];
+    const newMobs = spawnWavePure(stateRef.current.stage, stateRef.current.player.x, stateRef.current.player.y);
+    entitiesRef.current = [...entitiesRef.current, ...newMobs];
   };
 
   const spawnSubBosses = (count: number, stage: number) => {
-    const actualSubBossCount = stage > 20 ? count + 1 : count;
-    const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.25) * (stage > 20 ? 1.5 : 1.0);
-    const hpBase = 110 * Math.pow(1.18, stage - 1) * scaleFactor;
-    const atkBase = 11 * Math.pow(1.14, stage - 1) * scaleFactor;
-    const size = Math.min(45, Math.floor(20 * scaleFactor));
-
     const p = stateRef.current.player;
-    const newBosses: Entity[] = [];
-    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
-    const nameElPrefixes = { Metal: '[KIM]', Wood: '[MỘC]', Water: '[THỦY]', Fire: '[HỎA]', Earth: '[THỔ]' };
-
-    for (let i = 0; i < actualSubBossCount; i++) {
-      const angle = (Math.PI * 2 / actualSubBossCount) * i;
-      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      const prefix = nameElPrefixes[el];
-      newBosses.push({
-        id: Math.random(),
-        isBoss: false,
-        isSubBoss: true,
-        name: stage > 20 ? `${prefix} 🔴 Tam Ma Vương Hộ Pháp ${i + 1}` : `${prefix} Tịnh Vương Hộ Pháp ${i + 1}`,
-        x: p.x + Math.cos(angle) * 320,
-        y: p.y + Math.sin(angle) * 320,
-        hp: hpBase,
-        maxHp: hpBase,
-        atk: atkBase,
-        speed: stage > 20 ? 100 : 75,
-        size,
-        atkCd: 0,
-        color: stage > 20 ? "#d35400" : "#16a085",
-        element: el,
-      });
-    }
-
-    entitiesRef.current = [...entitiesRef.current, ...newBosses];
-    addNotification(`⚔️ KHAI CHIẾN ${actualSubBossCount} HỘ PHÁP THỦ LĨNH!`, stage > 20 ? "#d35400" : "#16a085");
+    const result = spawnSubBossesPure(count, stage, p.x, p.y);
+    entitiesRef.current = [...entitiesRef.current, ...result.bosses];
+    addNotification(result.notificationText, result.notificationColor);
   };
 
-  const WUXIA_BOSS_NAMES = [
-    "Kiều Phong", "Dương Quá", "Lệnh Hồ Xung", "Trương Vô Kỵ", 
-    "Đông Phương Bất Bại", "Hoàng Dược Sư", "Âu Dương Phong", 
-    "Hồng Thất Công", "Đoàn Trí Hưng", "Quách Tĩnh", "Cô Long", 
-    "Độc Cô Cầu Bại", "Nhậm Ngã Hành", "Vô Nhai Tử", "Thiên Sơn Đồng Lão"
-  ];
-
   const spawnFinalBosses = (count: number, stage: number) => {
-    const isLateGame = stage > 20;
-    const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.35) * (isLateGame ? 1.6 : 1.0);
-    const hpBase = 220 * Math.pow(1.21, stage - 1) * scaleFactor;
-    const atkBase = 18 * Math.pow(1.16, stage - 1) * scaleFactor;
-    const size = Math.min(75, Math.floor(26 * scaleFactor));
-
     const p = stateRef.current.player;
-    const newBosses: Entity[] = [];
-    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
-    const nameElPrefixes = { Metal: '[KIM]', Wood: '[MỘC]', Water: '[THỦY]', Fire: '[HỎA]', Earth: '[THỔ]' };
-
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 / count) * i;
-      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      const prefix = nameElPrefixes[el];
-      const randomWuxiaName = WUXIA_BOSS_NAMES[Math.floor(Math.random() * WUXIA_BOSS_NAMES.length)];
-      
-      newBosses.push({
-        id: Math.random(),
-        isBoss: true,
-        name: isLateGame ? `${prefix} 🔥 TÔNG TƯ THẦN - ${randomWuxiaName}` : `${prefix} ${randomWuxiaName}`,
-        x: p.x + Math.cos(angle) * 350,
-        y: p.y + Math.sin(angle) * 350,
-        hp: hpBase,
-        maxHp: hpBase,
-        atk: atkBase,
-        speed: isLateGame ? 95 : 68,
-        size,
-        atkCd: 0,
-        color: isLateGame ? "#9b59b6" : "#c0392b",
-        element: el,
-      });
-    }
-
-    entitiesRef.current = [...entitiesRef.current, ...newBosses];
-    addNotification(isLateGame ? "🔥 VÔ THỰNG CHI CHỦ DIÊM LA DIỆU THẾ XUẤT HIỆN!" : "👑 THẦN ĐIỆN CHIẾN BOSS CUỐI XUẤT HIỆN!", "#c0392b");
+    const result = spawnFinalBossesPure(count, stage, p.x, p.y);
+    entitiesRef.current = [...entitiesRef.current, ...result.bosses];
+    addNotification(result.notificationText, result.notificationColor);
   };
 
   const update = (dt: number) => {
