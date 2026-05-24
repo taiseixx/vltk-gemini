@@ -1,6 +1,8 @@
 
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'emerald' | 'gold_rarity' | 'crimson' | 'pink';
 
+export type HeritagePrefix = 'thất truyền' | 'gia truyền' | 'tông truyền' | 'ân điển';
+
 export interface Sect {
   id: string;
   name: string;
@@ -38,6 +40,49 @@ export interface Equipment {
   name: string;
   tier?: number;
   upgradeLvl?: number;
+  heritage?: HeritagePrefix; // Premium Heritage Class tag
+}
+
+export interface Quest {
+  id: string;
+  title: string;
+  description: string;
+  type: 'escort' | 'jailbreak' | 'sect' | 'songjin';
+  difficulty: 'Trầm Tích' | 'Giang Hồ' | 'Tông Môn' | 'Hoàng Kim';
+  banner: string;
+  targetCount: number;
+  currentCount: number;
+  status: 'available' | 'active' | 'completed' | 'claimed';
+  rewardLabel: string; // Tells reward type before hand-in
+  rewardValue: {
+    gold: number;
+    exp: number;
+    equipRarity: Rarity;
+    equipPrefix: HeritagePrefix;
+  };
+}
+
+export interface MartialManual {
+  id: string;
+  name: string;
+  sectId: string;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'; // Sơ cấp, Trung cấp, Cao cấp, Tuyệt thế
+  effectName: string;
+  statBoost: {
+    atkChance?: number; // extra critical chance (e.g. 0.05)
+    atkSpeed?: number; // weapon cd reduction (e.g. 0.1)
+    goldMult?: number; // e.g. 0.15
+    resBonus?: number; // e.g. 0.1
+    hpBonus?: number; // e.g. 50 flat
+    mpBonus?: number; // e.g. 30 flat
+    dmgMult?: number; // e.g. 0.10
+    cdReduc?: number; // e.g. 0.08
+  };
+  icon: string;
+  equipped: boolean;
+  level: number;
+  maxLevel: number;
+  levelRequirement: number;
 }
 
 export interface Companion {
@@ -182,4 +227,6 @@ export interface GameState {
   drops: Drop[];
   livesPurchased: number;
   companion?: Companion;
+  quests?: Quest[]; // Jianghu quest active/available list
+  manuals?: MartialManual[]; // Cultivated martial art secret books
 }

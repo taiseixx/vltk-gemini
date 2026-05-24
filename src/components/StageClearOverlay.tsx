@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, Sparkles, TrendingUp, Zap, Skull, Coins, Gift, Heart, Loader2 } from 'lucide-react';
 import { MAP_SIZE, RARITY_COLORS } from '../constants';
 import { getItemCostMultiplier, formatGoldValue } from '../utils/economy';
+import { generateRandomQuest } from '../utils/quest';
 
 interface Props {
   gameState: GameState;
@@ -91,10 +92,31 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
         return baseMobs + bosses * 24;
       };
 
+      let quests = [...(nextGs.quests || [])];
+      // Increment stage for active sect quests
+      quests = quests.map(q => {
+        if (q.status !== 'active') return q;
+        if (q.type === 'sect') {
+          const currentCount = Math.min(q.targetCount, q.currentCount + 1);
+          const status = currentCount >= q.targetCount ? 'completed' : q.status;
+          return { ...q, currentCount, status };
+        }
+        return q;
+      });
+
+      // Every 5 stages, generate 2 new random quests
+      if (prev.stage % 5 === 0) {
+        quests.push(
+          generateRandomQuest('clearA', nextStage),
+          generateRandomQuest('clearB', nextStage)
+        );
+      }
+
       return {
         ...nextGs,
         state: 'PLAYING',
         stage: nextStage,
+        quests,
         mobsTotal: getMobsTotal(nextStage),
         mobsKilled: 0,
         bossSpawned: false,

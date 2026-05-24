@@ -16,8 +16,10 @@ import SkillBar from './components/SkillBar';
 import StatsPopup from './components/StatsPopup';
 import StageClearOverlay from './components/StageClearOverlay';
 import ShopOverlay from './components/ShopOverlay';
+import QuestTracker from './components/QuestTracker';
 import { getCompanionForSect } from './utils/companionHelper';
 import { saveGame, loadGame, clearGameSave } from './utils/storage';
+import { getInitialManualsForSect, generateRandomQuest } from './utils/quest';
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -238,7 +240,12 @@ export default function App() {
       entities: [],
       drops: [],
       livesPurchased: 0,
-      companion: getCompanionForSect(sectId)
+      companion: getCompanionForSect(sectId),
+      quests: [
+        generateRandomQuest('A', 1, 'Trầm Tích'),
+        generateRandomQuest('B', 1, 'Giang Hồ')
+      ],
+      manuals: getInitialManualsForSect(sectId)
     };
 
     setGameState(initialState);
@@ -274,6 +281,13 @@ export default function App() {
         setGameState={setGameState}
         onAvatarClick={() => setShowStats(true)} 
         onTargetTextClick={() => {}} 
+        addNotification={addNotification}
+      />
+
+      <QuestTracker 
+        gameState={gameState} 
+        setGameState={setGameState} 
+        addNotification={addNotification} 
       />
 
       <SkillBar 

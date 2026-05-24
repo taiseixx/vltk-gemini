@@ -6,7 +6,7 @@ import {
   MutableRefObject,
   PointerEvent,
 } from "react";
-import { GameState, Entity, Particle, FloatingText, Drop, EquipmentType } from "../types";
+import { GameState, Entity, Particle, FloatingText, Drop, EquipmentType, MartialManual } from "../types";
 import {
   MAP_SIZE,
   RARITY_COLORS,
@@ -18,6 +18,7 @@ import {
 } from "../constants";
 import { checkAndTriggerCombo } from "../utils/comboHelper";
 import { cc } from "../lib/cocos";
+import { SECT_LEVEL_MANUALS } from "../utils/quest";
 import grassImg from "../assets/images/wuxia_grassland_environment_1779601113241.png";
 import stoneImg from "../assets/images/wuxia_stone_floor_1779601135174.png";
 import barricadeImg from "../assets/images/battlefield_barricade_1779384521972.png";
@@ -763,8 +764,8 @@ export default function GameCanvas({
     const strengthMult = stage >= 10 ? (1 + getBossCount(stage) * 0.15) : 1.0;
     const stage20Boost = stage > 20 ? (1.3 + (stage - 20) * 0.05) : 1.0;
 
-    const hpBase = 18 * Math.pow(1.13, stage - 1) * strengthMult * stage20Boost;
-    const atkBase = 2.5 * Math.pow(1.08, stage - 1) * strengthMult * (stage > 20 ? 1.25 : 1.0);
+    const hpBase = 24 * Math.pow(1.15, stage - 1) * strengthMult * stage20Boost;
+    const atkBase = 3.2 * Math.pow(1.095, stage - 1) * strengthMult * (stage > 20 ? 1.25 : 1.0);
     const newEntities: Entity[] = [];
 
     // Số đợt quái tăng đột khởi dồn dập sau stage 20
@@ -796,8 +797,8 @@ export default function GameCanvas({
   const spawnSubBosses = (count: number, stage: number) => {
     const actualSubBossCount = stage > 20 ? count + 1 : count;
     const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.25) * (stage > 20 ? 1.5 : 1.0);
-    const hpBase = 70 * Math.pow(1.16, stage - 1) * scaleFactor;
-    const atkBase = 6 * Math.pow(1.12, stage - 1) * scaleFactor;
+    const hpBase = 110 * Math.pow(1.18, stage - 1) * scaleFactor;
+    const atkBase = 11 * Math.pow(1.14, stage - 1) * scaleFactor;
     const size = Math.min(45, Math.floor(20 * scaleFactor));
 
     const p = stateRef.current.player;
@@ -841,8 +842,8 @@ export default function GameCanvas({
   const spawnFinalBosses = (count: number, stage: number) => {
     const isLateGame = stage > 20;
     const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.35) * (isLateGame ? 1.6 : 1.0);
-    const hpBase = 120 * Math.pow(1.18, stage - 1) * scaleFactor;
-    const atkBase = 10 * Math.pow(1.12, stage - 1) * scaleFactor;
+    const hpBase = 220 * Math.pow(1.21, stage - 1) * scaleFactor;
+    const atkBase = 18 * Math.pow(1.16, stage - 1) * scaleFactor;
     const size = Math.min(75, Math.floor(26 * scaleFactor));
 
     const p = stateRef.current.player;
@@ -911,9 +912,9 @@ export default function GameCanvas({
           p.rageTimer = Math.max(0, (p.rageTimer || 8.0) - dt);
           p.rage = Math.floor((p.rageTimer / 8.0) * (p.maxRage || 100));
           
-          // Regenerate HP continuously: +2% Max HP per second in burst mode!
-          p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.02 + p.currentStats.con * 1.5 + 4) * dt);
-          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 3.0 + 8) * dt);
+          // Balanced continuous regeneration inside rage mode (0.6% Max HP + scaled stats)
+          p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.006 + p.currentStats.con * 0.4 + 1.2) * dt);
+          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 0.8 + 2.5) * dt);
           
           // Generate customized Elemental trail particles surrounding player!
           if (Math.random() < 0.4) {
@@ -941,8 +942,9 @@ export default function GameCanvas({
             addNotification("🛡️ Trạng thái bộc phát Ngũ Hành kết thúc!", "#95a5a6");
           }
         } else {
-          p.hp = Math.min(p.maxHp, p.hp + (p.currentStats.con * 1.5 + 4) * dt);
-          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 3.0 + 8) * dt);
+          // Balanced, challenging normal-state recovery
+          p.hp = Math.min(p.maxHp, p.hp + (p.currentStats.con * 0.15 + 0.4) * dt);
+          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 0.35 + 0.6) * dt);
           
           if (p.rage >= (p.maxRage || 100)) {
             p.rageActive = true;
@@ -1342,7 +1344,7 @@ export default function GameCanvas({
       for (let i = dropsRef.current.length - 1; i >= 0; i--) {
         const d = dropsRef.current[i];
         if (Math.hypot(p.x - d.x, p.y - d.y) < pickupRange) {
-          const goldVal = equipItem(d, p, buffs, prev.stage);
+          const goldVal = equipItem(d, p, buffs, prev.stage, prev.manuals);
           const boostedGold = prev.companion ? Math.floor(goldVal * 1.15) : goldVal;
           goldEarned += boostedGold;
           dropsRef.current.splice(i, 1);
@@ -1523,6 +1525,80 @@ export default function GameCanvas({
           addNotification(`⚡ LÊN CẤP ${newLevel}!`, "#f1c40f");
         }
 
+        // 1. Award Sect-specific Martial manual (Bí kíp) level benchmarks (20, 40, 60)
+        let manuals = [...(prev.manuals || [])];
+        if (newLevel > prev.player.level && [20, 40, 60].includes(newLevel)) {
+          const sectId = prev.player.sectId || 'sl';
+          const list = SECT_LEVEL_MANUALS[sectId];
+          const manualTemplateIndex = Math.floor(newLevel / 20) - 1; // 0 for lvl 20, 1 for lvl 40, etc
+          if (list && list[manualTemplateIndex]) {
+            const template = list[manualTemplateIndex];
+            const newManual: MartialManual = {
+              id: `manual_lvl_${sectId}_${newLevel}`,
+              name: `📚 ${template.name}`,
+              sectId,
+              rarity: template.rarity,
+              effectName: `Trợ lực bản môn: ${template.effect}`,
+              statBoost: template.statBoost,
+              icon: '📚',
+              equipped: false,
+              level: 1,
+              maxLevel: 5,
+              levelRequirement: newLevel
+            };
+            manuals.push(newManual);
+            addNotification(`✨ TAM CẤP SƯ MÔN: DUYÊN TRUYỀN [${template.name}]!`, "#ff00ff");
+          }
+        }
+
+        // 2. Low-chance random generic Secret Martial arts drop
+        const manualRollChance = e.isBoss ? 0.08 : (e.isSubBoss ? 0.03 : 0.005);
+        if (Math.random() < manualRollChance) {
+          const genericTemplates = [
+            { name: '📚 Tây Vực Càn Khôn Đại Na Di Quyết', rarity: 'rare' as const, effectName: 'Cơ duyên: +6% Kháng phòng thủ toàn diện', statBoost: { resBonus: 0.06 } },
+            { name: '📚 Giang Hồ Độc Cô Cửu Kiếm Tàn Di bản', rarity: 'epic' as const, effectName: 'Cơ duyên: +5% Tỉ lệ Chí Mạng sát phạt', statBoost: { atkChance: 0.05 } },
+            { name: '📚 Cổ Bản Thần Hành Bách Biến Pháp Kỳ', rarity: 'rare' as const, effectName: 'Cơ duyên: Rút ngắn 6% CD xuất pháp trận', statBoost: { atkSpeed: 0.06 } },
+            { name: '📚 Cửu Dương Thần Kinh Sơ Giải Quyết', rarity: 'legendary' as const, effectName: 'Cơ duyên: +50 HP sinh khí & +25 MP nội nguyên', statBoost: { hpBonus: 50, mpBonus: 25 } },
+          ];
+          const template = genericTemplates[Math.floor(Math.random() * genericTemplates.length)];
+          const randomManualAward: MartialManual = {
+            id: `manual_drop_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            name: template.name,
+            sectId: 'generic',
+            rarity: template.rarity,
+            effectName: template.effectName,
+            statBoost: template.statBoost,
+            icon: '📚',
+            equipped: false,
+            level: 1,
+            maxLevel: 5,
+            levelRequirement: 1
+          };
+          manuals.push(randomManualAward);
+          addNotification(`🎁 CƠ DUYÊN NGẪU NHIÊN: LĨNH HỘI [${template.name}]!`, "#00ffff");
+        }
+
+        // 3. Track in-battle active quest progress details
+        let quests = prev.quests ? prev.quests.map(q => {
+          if (q.status !== 'active') return q;
+          let currentCount = q.currentCount;
+          
+          if (q.type === 'escort' && !e.isBoss && !e.isSubBoss) {
+            currentCount = Math.min(q.targetCount, currentCount + 1);
+          } else if (q.type === 'jailbreak' && (e.isSubBoss || e.isBoss)) {
+            currentCount = Math.min(q.targetCount, currentCount + 1);
+          } else if (q.type === 'songjin' && e.isBoss) {
+            currentCount = Math.min(q.targetCount, currentCount + 1);
+          }
+          
+          const status: "available" | "active" | "completed" | "claimed" = currentCount >= q.targetCount ? 'completed' : q.status;
+          if (status === 'completed' && q.status === 'active') {
+            addNotification(`✨ NHIỆM VỤ [${q.title}] HOÀN THÀNH!`, "#ffff00");
+          }
+          
+          return { ...q, currentCount, status };
+        }) : [];
+
         let companion = prev.companion;
         if (companion) {
           companion = { ...companion };
@@ -1550,6 +1626,8 @@ export default function GameCanvas({
           exp: newExp,
           companion,
           mobsKilled: prev.mobsKilled + 1,
+          quests,
+          manuals,
           player: {
             ...prev.player,
             level: newLevel,
@@ -1640,6 +1718,7 @@ export default function GameCanvas({
     p: GameState["player"],
     buffs: GameState["buffs"],
     stage: number,
+    manuals?: MartialManual[],
   ): number => {
     const current = p.equipment[item.type];
     if (!current || item.power > current.power) {
@@ -1651,44 +1730,66 @@ export default function GameCanvas({
         tier: item.tier,
       };
 
+      // Extract Secret Bible (Bí Kíp) active passive buffs
+      let bAtkChance = 0;
+      let bAtkSpeed = 0;
+      let bGoldMult = 1.0;
+      let bResBonus = 1.0;
+      let bHpBonus = 0;
+      let bMpBonus = 0;
+
+      if (manuals) {
+        manuals.forEach(m => {
+          if (m.equipped) {
+            if (m.statBoost.atkChance) bAtkChance += m.statBoost.atkChance;
+            if (m.statBoost.atkSpeed) bAtkSpeed += m.statBoost.atkSpeed;
+            if (m.statBoost.goldMult) bGoldMult += m.statBoost.goldMult;
+            if (m.statBoost.resBonus) bResBonus += m.statBoost.resBonus;
+            if (m.statBoost.hpBonus) bHpBonus += m.statBoost.hpBonus;
+            if (m.statBoost.mpBonus) bMpBonus += m.statBoost.mpBonus;
+          }
+        });
+      }
+
       // Recalc stats buffs
       const eq = p.equipment;
       
-      // Weapon (VJ) -> DMG
-      buffs.dmgMult = 1 + (eq.weapon ? eq.weapon.power * 0.1 : 0);
+      // Balanced Weapon (VJ) -> DMG: x0.02 instead of x0.1 (prevents hacker damage scaling)
+      buffs.dmgMult = 1 + (eq.weapon ? eq.weapon.power * 0.02 : 0);
       
-      // Armor (GIÁP) -> HP
-      buffs.hpMult = 1 + (eq.armor ? eq.armor.power * 0.05 : 0);
+      // Balanced Armor (GIÁP) -> HP: x0.012 instead of x0.05
+      buffs.hpMult = 1 + (eq.armor ? eq.armor.power * 0.012 : 0);
       
-      // Accessory (💍) & Horse (🐴) -> CD reduction
-      const cdBonus = (eq.accessory ? eq.accessory.power * 0.02 : 0) + (eq.horse ? eq.horse.power * 0.01 : 0);
-      buffs.cdReduc = Math.min(0.75, cdBonus);
+      // Accessory (💍) & Horse (🐴) -> CD reduction (capped at 50% limit to retain skill tactical pacing)
+      const cdBonus = (eq.accessory ? eq.accessory.power * 0.005 : 0) + (eq.horse ? eq.horse.power * 0.003 : 0) + bAtkSpeed;
+      buffs.cdReduc = Math.min(0.50, cdBonus);
       
       // Special (🔮) -> Resistance (resMult)
-      buffs.resMult = 1 + (eq.special ? eq.special.power * 0.1 : 0);
+      buffs.resMult = (1 + (eq.special ? eq.special.power * 0.025 : 0)) * bResBonus;
       
       // Movement speed -> Horse (🐴) adds direct speed
       const speedBonus = eq.horse ? eq.horse.power * 4 : 0;
       p.speed = 160 + p.currentStats.agi * 5 + speedBonus;
       
       // Cloak (🧥) -> Crit DMG Multiplier
-      const critDmgBonus = eq.cloak ? eq.cloak.power * 0.03 : 0;
+      const critDmgBonus = eq.cloak ? eq.cloak.power * 0.008 : 0;
       buffs.critDmgMult = 1.5 + critDmgBonus;
       
       // Seal (🔏) -> Skill range bonus
-      const rangeBonus = eq.seal ? eq.seal.power * 2.5 : 0;
+      const rangeBonus = eq.seal ? eq.seal.power * 0.8 : 0;
       buffs.skillRangeBonus = rangeBonus;
 
+      // Integrate Bí Kíp flat bonuses into player totals
       const newMaxHp = Math.floor(
-        (100 + p.currentStats.con * 20) * buffs.hpMult,
-      );
+        (300 + p.currentStats.con * 20) * buffs.hpMult,
+      ) + bHpBonus;
       p.maxHp = newMaxHp;
       
       const newMaxMp = Math.floor(
         (100 + p.currentStats.nei * 15) * 1.0,
-      );
+      ) + bMpBonus;
       p.maxMp = newMaxMp;
-      p.atk = Math.floor((10 + p.currentStats.str * 3) * buffs.dmgMult);
+      p.atk = Math.floor((25 + p.currentStats.str * 3) * buffs.dmgMult);
 
       addNotification(`Nhặt được [${item.name}]`, RARITY_COLORS[item.rarity]);
       return 0;

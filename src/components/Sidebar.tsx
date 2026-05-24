@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GameState, Equipment, Rarity } from '../types';
+import { GameState, Equipment, Rarity, MartialManual } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { RARITY_COLORS, SECTS } from '../constants';
 // @ts-ignore
@@ -14,6 +14,7 @@ interface Props {
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   onAvatarClick: () => void;
   onTargetTextClick: () => void;
+  addNotification?: (text: string, color: string) => void;
 }
 
 const formatGold = (value: number): string => {
@@ -26,7 +27,7 @@ const formatGold = (value: number): string => {
   return value.toLocaleString('en-US');
 };
 
-export default function Sidebar({ gameState, setGameState, onAvatarClick }: Props) {
+export default function Sidebar({ gameState, setGameState, onAvatarClick, addNotification }: Props) {
   const p = gameState.player;
   const eq = p.equipment;
   const sect = SECTS.find(s => s.color === p.color);
@@ -34,6 +35,125 @@ export default function Sidebar({ gameState, setGameState, onAvatarClick }: Prop
   const [selectedGear, setSelectedGear] = useState<{ type: string; item: Equipment | null; emoji: string; slotKey: string } | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [showEquipment, setShowEquipment] = useState(true);
+  const [showManuals, setShowManuals] = useState(false);
+
+  const handleToggleEquipManual = (manualId: string) => {
+    setGameState(prev => {
+      if (!prev) return null;
+      const manuals = prev.manuals ? [...prev.manuals] : [];
+      const current = manuals.find(m => m.id === manualId);
+      if (!current) return prev;
+
+      const currentlyEquippedCount = manuals.filter(m => m.equipped).length;
+      const isEquipping = !current.equipped;
+      
+      if (isEquipping && currentlyEquippedCount >= 2) {
+        if (addNotification) addNotification("⚠️ Chỉ được bổ sức tối đa 2 quyển Bí Kíp cùng lúc!", "#e74c3c");
+        return prev;
+      }
+
+      const updatedManuals = manuals.map(m => {
+        if (m.id === manualId) {
+          return { ...m, equipped: isEquipping };
+        }
+        return m;
+      });
+
+      // Recalculate stats with the now updated manuals!
+      const playerCopy = { ...prev.player };
+      const eq = playerCopy.equipment;
+      
+      // Calculate normal equipment buffs
+      let dmgMult = 1 + (eq.weapon ? eq.weapon.power * 0.02 : 0);
+      let hpMult = 1 + (eq.armor ? eq.armor.power * 0.012 : 0);
+      let cdReduc = (eq.accessory ? eq.accessory.power * 0.01 : 0) + (eq.horse ? eq.horse.power * 0.005 : 0);
+
+      // Cumulate passive manual stats on top
+      updatedManuals.forEach(m => {
+        if (!m.equipped) return;
+        const multiplier = 1 + (m.level - 1) * 0.45;
+        
+        if (m.statBoost.dmgMult) dmgMult += m.statBoost.dmgMult * multiplier;
+        if (m.statBoost.hpBonus) hpMult += (m.statBoost.hpBonus / 300) * multiplier;
+        if (m.statBoost.cdReduc) cdReduc += m.statBoost.cdReduc * multiplier;
+      });
+
+      playerCopy.maxHp = Math.floor((300 + playerCopy.currentStats.con * 20) * hpMult);
+      playerCopy.atk = Math.floor((25 + playerCopy.currentStats.str * 3) * dmgMult);
+      
+      prev.buffs.dmgMult = dmgMult;
+      prev.buffs.hpMult = hpMult;
+      prev.buffs.cdReduc = Math.min(0.75, cdReduc);
+
+      return {
+        ...prev,
+        manuals: updatedManuals,
+        player: playerCopy
+      };
+    });
+    
+    if (addNotification) addNotification("☯️ Khí lực hoán phối Bí Kíp thành công!", "#2ecc71");
+  };
+
+  const handleUpgradeManual = (manualId: string) => {
+    setGameState(prev => {
+      if (!prev) return null;
+      const manuals = prev.manuals ? [...prev.manuals] : [];
+      const current = manuals.find(m => m.id === manualId);
+      if (!current) return prev;
+
+      if (current.level >= current.maxLevel) {
+        if (addNotification) addNotification("⚜️ Bí kíp đã thừa đạt đỉnh tuyệt học!", "#f1c40f");
+        return prev;
+      }
+
+      const cost = Math.floor(600 * Math.pow(1.8, current.level - 1));
+      if (prev.gold < cost) {
+        if (addNotification) addNotification("⚠️ Không đủ Vàng bồi dưỡng thăng cấp!", "#e74c3c");
+        return prev;
+      }
+
+      const updatedManuals = manuals.map(m => {
+        if (m.id === manualId) {
+          return { ...m, level: m.level + 1 };
+        }
+        return m;
+      });
+
+      // Recalculate stats with the newly leveled manuals
+      const playerCopy = { ...prev.player };
+      const eq = playerCopy.equipment;
+      
+      let dmgMult = 1 + (eq.weapon ? eq.weapon.power * 0.02 : 0);
+      let hpMult = 1 + (eq.armor ? eq.armor.power * 0.012 : 0);
+      let cdReduc = (eq.accessory ? eq.accessory.power * 0.01 : 0) + (eq.horse ? eq.horse.power * 0.005 : 0);
+
+      updatedManuals.forEach(m => {
+        if (!m.equipped) return;
+        const multiplier = 1 + (m.level - 1) * 0.45;
+        
+        if (m.statBoost.dmgMult) dmgMult += m.statBoost.dmgMult * multiplier;
+        if (m.statBoost.hpBonus) hpMult += (m.statBoost.hpBonus / 300) * multiplier;
+        if (m.statBoost.cdReduc) cdReduc += m.statBoost.cdReduc * multiplier;
+      });
+
+      playerCopy.maxHp = Math.floor((300 + playerCopy.currentStats.con * 20) * hpMult);
+      playerCopy.atk = Math.floor((25 + playerCopy.currentStats.str * 3) * dmgMult);
+      
+      prev.buffs.dmgMult = dmgMult;
+      prev.buffs.hpMult = hpMult;
+      prev.buffs.cdReduc = Math.min(0.75, cdReduc);
+
+      return {
+        ...prev,
+        gold: prev.gold - cost,
+        manuals: updatedManuals,
+        player: playerCopy
+      };
+    });
+
+    if (addNotification) addNotification("📈 Chúc mừng: Thăng cấp tuyệt học Bí Kíp!", "#f1c40f");
+  };
 
   const handleSlotClick = (type: string, item: Equipment | null, emoji: string, slotKey: string) => {
     if (selectedGear && selectedGear.slotKey === slotKey) {
@@ -201,14 +321,163 @@ export default function Sidebar({ gameState, setGameState, onAvatarClick }: Prop
           </div>
         </div>
 
-        <button 
-          onClick={() => setShowEquipment(!showEquipment)}
-          className="pointer-events-auto border border-white/10 hover:border-gold bg-black/90 hover:bg-[#121216] text-[8px] md:text-[10px] text-gold hover:text-white font-sans font-black px-2 py-1.5 rounded shadow-md z-[110] active:scale-95 transition-all flex items-center gap-1"
-        >
-          {showEquipment ? "👁️ Ẩn Trang Bị" : "🎒 Hiện Trang Bị"}
-        </button>
+        <div className="flex gap-1.5 pointer-events-auto select-none scale-90 sm:scale-100 origin-right">
+          <button 
+            type="button"
+            onClick={() => {
+              const next = !showEquipment;
+              setShowEquipment(next);
+              if (next) setShowManuals(false); // Close other mutually exclusive panel
+            }}
+            className={`pointer-events-auto border text-[9px] md:text-[10px] font-sans font-black px-2.5 py-1.5 rounded shadow-md z-[110] active:scale-95 transition-all flex items-center gap-1 cursor-pointer
+              ${showEquipment ? 'bg-[#d4af37]/20 border-[#d4af37] text-white shadow-[0_0_8px_rgba(212,175,55,0.25)]' : 'border-white/10 bg-black/95 text-gold hover:text-white'}`}
+          >
+            🎒 Trang Bị {showEquipment ? '▲' : '▼'}
+          </button>
+          
+          <button 
+            type="button"
+            onClick={() => {
+              const next = !showManuals;
+              setShowManuals(next);
+              if (next) setShowEquipment(false); // Close other mutually exclusive panel
+            }}
+            className={`pointer-events-auto border text-[9px] md:text-[10px] font-sans font-black px-2.5 py-1.5 rounded shadow-md z-[110] active:scale-95 transition-all flex items-center gap-1 cursor-pointer
+              ${showManuals ? 'bg-[#d4af37]/20 border-[#d4af37] text-white shadow-[0_0_8px_rgba(212,175,55,0.25)]' : 'border-white/10 bg-black/95 text-gold hover:text-white'}`}
+          >
+            📚 Bí Kíp {showManuals ? '▲' : '▼'}
+          </button>
+        </div>
         
         <div className="flex flex-row-reverse items-start gap-4">
+          <AnimatePresence>
+            {showManuals && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, x: 20 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.95, x: 20 }}
+                className="relative p-3.5 flex flex-col items-center rounded-xl border border-white/15 pointer-events-auto min-w-[210px] sm:min-w-[245px] max-w-[270px] select-none text-xs text-gray-300"
+                style={{
+                  backgroundColor: 'rgba(15, 7, 8, 0.45)',
+                  backgroundImage: `
+                    radial-gradient(circle at center, rgba(25, 4, 6, 0.5) 0%, rgba(5, 1, 2, 0.95) 100%),
+                    url(${equipmentBg})
+                  `,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundBlendMode: 'overlay',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.15)',
+                }}
+              >
+                <p className="text-[10px] md:text-[11px] text-gray-350 font-bold mb-2 uppercase tracking-[0.2em] font-serif border-b border-white/10 pb-1 w-full text-center" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                  Sư Môn Bí Kíp
+                </p>
+                
+                {gameState.manuals && gameState.manuals.length > 0 ? (
+                  <div className="space-y-3 w-full max-h-[350px] overflow-y-auto pr-1">
+                    {gameState.manuals.map((m: MartialManual) => {
+                      const isEquipped = m.equipped;
+                      
+                      // Cost calculation: 600 Gold base multiply by 1.8x per upgrade level
+                      const upgradeCost = Math.floor(600 * Math.pow(1.8, m.level - 1));
+                      const isMaxLevel = m.level >= m.maxLevel;
+                      const hasGold = gameState.gold >= upgradeCost;
+                      const isLvlLocked = p.level < (m.levelRequirement || 1);
+
+                      let rColor = RARITY_COLORS[m.rarity as keyof typeof RARITY_COLORS] || '#fff';
+                      
+                      return (
+                        <div 
+                          key={m.id} 
+                          className={`p-2 rounded-lg border flex flex-col gap-1.5 transition-all duration-200 bg-black/45 hover:bg-black/60 text-left
+                            ${isEquipped ? 'border-amber-500 shadow-[0_0_8px_rgba(212,175,55,0.15)] bg-amber-950/10' : 'border-white/5'}`}
+                        >
+                          <div className="flex items-start justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm select-none">📚</span>
+                              <div>
+                                <h5 className="font-serif font-black text-[11px] tracking-tight line-clamp-1" style={{ color: rColor }}>
+                                  {m.name.replace('📚 ', '')}
+                                </h5>
+                                <span className="text-[8.5px] font-sans font-bold text-gray-500 uppercase tracking-wider">
+                                  {m.rarity.toUpperCase()} &bull; Cấp {m.level}/5
+                                </span>
+                              </div>
+                            </div>
+                            
+                            {/* Equipped Tag status */}
+                            <span 
+                              onClick={() => { if (!isLvlLocked) handleToggleEquipManual(m.id); }}
+                              className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter cursor-pointer shrink-0 select-none border transition-colors
+                                ${isLvlLocked
+                                  ? 'bg-zinc-900 border-zinc-800 text-zinc-500 cursor-not-allowed'
+                                  : isEquipped 
+                                  ? 'bg-[#d81b60]/10 border-[#d81b60]/45 text-[#ec407a] shadow-[0_0_4px_rgba(236,64,122,0.2)]' 
+                                  : 'bg-zinc-800/15 border-white/5 text-gray-450 hover:text-white'}`}
+                            >
+                              {isLvlLocked ? 'KHÓA' : isEquipped ? 'CHIẾN' : 'KHAI'}
+                            </span>
+                          </div>
+
+                          {isLvlLocked ? (
+                            <p className="text-[8.5px] text-red-450 font-serif leading-none italic">
+                              ⚠️ Chỉ từ cấp {m.levelRequirement} truyền thụ!
+                            </p>
+                          ) : (
+                            <div className="space-y-1 bg-black/20 p-1.5 rounded text-[9.5px] font-sans leading-relaxed text-gray-400 border border-white/[0.02]">
+                              <p className="font-serif italic text-[10px] text-yellow-550/90 leading-tight">
+                                {m.effectName}
+                              </p>
+                              {m.statBoost.dmgMult && (
+                                <p>⚔️ Lực phách công chưởng: <span className="text-[#a3e635] font-bold font-sans">+{Math.floor(m.statBoost.dmgMult * (1 + (m.level - 1) * 0.45) * 100)}% DMG</span></p>
+                              )}
+                              {m.statBoost.hpBonus && (
+                                <p>🩸 Sinh ký huyết bản: <span className="text-[#a3e635] font-bold font-sans">+{Math.floor(m.statBoost.hpBonus * (1 + (m.level - 1) * 0.45))} HP</span></p>
+                              )}
+                              {m.statBoost.cdReduc && (
+                                <p>⚙️ Thấu lăng giảm hồi: <span className="text-[#a3e635] font-bold font-sans">+{Math.floor(m.statBoost.cdReduc * (1 + (m.level - 1) * 0.45) * 100)}% CD</span></p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Upgrade Button */}
+                          {!isMaxLevel && !isLvlLocked && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpgradeManual(m.id)}
+                              disabled={!hasGold}
+                              className={`w-full py-1 text-[8.5px] font-sans font-extrabold uppercase tracking-widest rounded border transition-all cursor-pointer text-center
+                                ${hasGold 
+                                  ? 'bg-amber-600 hover:bg-amber-500 border-amber-500 text-white' 
+                                  : 'bg-zinc-950 border-zinc-850 text-gray-650 cursor-not-allowed opacity-40'}`}
+                            >
+                              Thăng Cấp (+{upgradeCost} Vàng)
+                            </button>
+                          )}
+                          {isMaxLevel && !isLvlLocked && (
+                            <div className="text-center text-[8.5px] uppercase font-bold tracking-widest text-[#f1c40f] border border-[#f1c40f]/20 bg-[#f1c40f]/5 py-0.5 rounded leading-none select-none">
+                              ⚜️ Cực Cảnh Thần Phong Max
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-center text-gray-500 italic py-4">
+                    Môn hạ chưa có linh thể thọ truyền bí kíp nào. Hãy hành tẩu thêm!
+                  </p>
+                )}
+                
+                <p className="text-[8px] text-gray-500 text-center font-serif leading-tight mt-3.5 italic border-t border-white/5 pt-1 w-full">
+                  Có thể phối hợp trang bị 2 quyển Chân Truyền Bí Kíp đồng hành!
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {showEquipment && (
               <motion.div 
