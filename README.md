@@ -1,6 +1,9 @@
-<p align="center">
-  <strong>⚔️ Jianghu Hustle: The Roguelite Run</strong>
-</p>
+<h1 align="center">
+  <strong>⚔️ Jianghu Hustle: The Roguelite Run ⚔️</strong>
+</h1>
+<h3 align="center">
+ <a href="https://ai.studio/apps/e2192d0e-6015-40b9-8039-bf2a3fe8c114">👉 Let's try in this Google AI Studio link 👈</a> 
+</h3>
 
 <p align="center">
   <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_women_banner_1779373260490.png" alt="Võ Lâm Giang Hồ Banner 1" width="99%">
