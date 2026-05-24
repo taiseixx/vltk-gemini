@@ -29,7 +29,7 @@
 - [x] 3.7 Verify import boundary: `imageProcessing.ts` không import từ `react/game` — grep clean
 - [x] 3.8 `npm run lint && npm run build` pass
 - [x] 3.9 Smoke test: ảnh sprite load đúng, không có sprite trắng/vỡ — user confirmed (tạm OK, không thấy regression)
-- [ ] 3.10 Commit `refactor: extract image processing and cache into render layer`
+- [x] 3.10 Commit `refactor: extract image processing and cache into render layer` — commit 7cf222a
 
 ## 4. Checkpoint 3 — Tách render/spriteLoader
 
@@ -39,7 +39,7 @@
 - [x] 4.4 Giữ counter `loadedResourcesRef.current` để loading screen vẫn hoạt động — done via `onProgress` callback. `incrementLoaded` helper đã xóa vì không còn dùng.
 - [x] 4.5 `npm run lint && npm run build` pass
 - [x] 4.6 Smoke test: loading screen vẫn hiển thị progress, vào game không stuck — user confirmed loading behavior identical to pre-refactor (overlap bug is pre-existing, not regression). Eager ref assignment via `onSpriteLoaded` callback preserves exact original behavior.
-- [ ] 4.7 Commit `refactor: extract sprite loader into render layer`
+- [x] 4.7 Commit `refactor: extract sprite loader into render layer` — commit a5c1e2b
 
 ## 5. Checkpoint 4 — Tách render/character (drawHuman)
 
@@ -49,7 +49,7 @@
 - [x] 5.4 Update 2 call sites: entity render + player render → cả hai gọi `resolveSpriteForEntity` rồi pass result + primitives qua `DrawHumanParams`
 - [x] 5.5 `npm run lint && npm run build` pass
 - [~] 5.6 Smoke test: BYPASSED per user — pushing through to CP8
-- [ ] 5.7 Commit `refactor: extract character rendering into render/character.ts`
+- [x] 5.7 Commit `refactor: extract character rendering into render/character.ts` — commit d6fe7c7
 
 ## 6. Checkpoint 5 — Tách render/world (terrain, scenery, particles, texts, loading)
 
@@ -59,7 +59,7 @@
 - [x] 6.4 Trong `render()`, replace particles block + floating texts block bằng calls. Render order giữ y nguyên (terrain → scenery → entities → particles → texts → UI)
 - [x] 6.5 `npm run lint && npm run build` pass
 - [~] 6.6 Smoke test: BYPASSED per user
-- [ ] 6.7 Commit `refactor: extract world rendering passes into render/world.ts`
+- [x] 6.7 Commit `refactor: extract world rendering passes into render/world.ts` — commit a1d8a9a
 
 ## 7. Checkpoint 6 — Tách game/elements và game/spawn
 
@@ -69,7 +69,7 @@
 - [x] 7.4 Boundary check passed: `game/*` không import react/render — grep clean
 - [x] 7.5 `npm run lint && npm run build` pass
 - [~] 7.6 Smoke test: BYPASSED per user
-- [ ] 7.7 Commit `refactor: extract spawn and elements into game layer`
+- [x] 7.7 Commit `refactor: extract spawn and elements into game layer` — commit c9020c7
 
 ## 8. Checkpoint 7 — Tách game/systems/* lần lượt
 

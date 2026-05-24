@@ -60,6 +60,7 @@ import { drawHuman } from "../render/character";
 import { drawLoadingScreen, drawParticles, drawFloatingTexts } from "../render/world";
 import { getSectIdFromColor, getSectElement, getElementalMultipliers } from "../game/elements";
 import { getBossCount, getMobsTotal, spawnWave as spawnWavePure, spawnSubBosses as spawnSubBossesPure, spawnFinalBosses as spawnFinalBossesPure } from "../game/spawn";
+import { tickCompanion } from "../game/systems/companion";
 
 interface Props {
   gameState: GameState;
@@ -1303,62 +1304,16 @@ export default function GameCanvas({
     update(dt);
 
     // Companion Autonomous Battle Strike (Tốc đánh, kĩ năng theo đẳng cấp & trang bị!)
+    tickCompanion(
+      stateRef.current,
+      dt,
+      entitiesRef.current,
+      particlesRef.current,
+      textsRef.current,
+      companionAtkTimerRef,
+      companionTotalDmgRef,
+    );
     const comp = stateRef.current.companion;
-    if (comp && stateRef.current.state === "PLAYING") {
-      companionAtkTimerRef.current -= dt;
-      if (companionAtkTimerRef.current <= 0) {
-        companionAtkTimerRef.current = Math.max(1.0, 4.5 - comp.level * 0.15);
-
-        const p = stateRef.current.player;
-        let minDist = 350;
-        let nearest: any = null;
-        entitiesRef.current.forEach((e) => {
-          const d = Math.hypot(p.x - e.x, p.y - e.y);
-          if (d < minDist && e.hp > 0) {
-            minDist = d;
-            nearest = e;
-          }
-        });
-
-        if (nearest) {
-          const clawLvl = comp.equipment.weapon?.upgradeLvl || 0;
-          const compDamage = Math.floor((15 + comp.level * 4 + clawLvl * 5) * (1 + comp.level * 0.05));
-          
-          nearest.hp -= compDamage;
-          
-          // Spawn beautiful trail effect from companion to nearest target
-          const stepCount = 8;
-          for (let i = 0; i <= stepCount; i++) {
-            const ratio = i / stepCount;
-            const px = p.x + (nearest.x - p.x) * ratio;
-            const py = p.y + (nearest.y - p.y) * ratio;
-            particlesRef.current.push({
-              x: px,
-              y: py,
-              vx: (Math.random() - 0.5) * 30,
-              vy: (Math.random() - 0.5) * 30,
-              life: 0.35,
-              color: "#f1c40f",
-              size: 2.2
-            });
-          }
-
-          // Combine companion damage if there's too much text
-          if (textsRef.current.length < 35) {
-            textsRef.current.push({
-              id: Math.random(),
-              x: nearest.x,
-              y: nearest.y - 40,
-              text: `☯️ [${comp.name}] HỒ TRỢ KÍCH SÁT -${compDamage}`,
-              color: "#ffca28",
-              life: 1.4
-            });
-          } else {
-             companionTotalDmgRef.current += compDamage;
-          }
-        }
-      }
-    }
 
     // Push accumulated frame damage if any
     if (frameTotalDmgRef.current > 0) {
