@@ -16,12 +16,13 @@ import SkillBar from './components/SkillBar';
 import StatsPopup from './components/StatsPopup';
 import StageClearOverlay from './components/StageClearOverlay';
 import ShopOverlay from './components/ShopOverlay';
+import { getCompanionForSect } from './utils/companionHelper';
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showStats, setShowStats] = useState(false);
   const [showShop, setShowShop] = useState(false);
-  const [activeTab, setActiveTab] = useState<'stats' | 'skills'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'skills' | 'companion'>('stats');
   const [notifications, setNotifications] = useState<{ id: number; text: string; color: string }[]>([]);
   
   const particlesRef = useRef<Particle[]>([]);
@@ -43,12 +44,43 @@ export default function App() {
     const sect = SECTS.find(s => s.id === sectId);
     if (!sect) return;
 
-    sceneryRef.current = Array.from({ length: 800 }, () => ({
-      x: Math.random() * MAP_SIZE,
-      y: Math.random() * MAP_SIZE,
-      t: Math.floor(Math.random() * 4), // 0 to 3
-      sz: 20 + Math.random() * 40
-    }));
+    // Split the 4000x4000 map into 20x20 grid cells of 200x200 pixels each
+    const colWidth = 200;
+    const rowHeight = 200;
+    const numCols = MAP_SIZE / colWidth; // 20
+    const numRows = MAP_SIZE / rowHeight; // 20
+    const scenery: { x: number; y: number; t: number; sz: number }[] = [];
+
+    for (let r = 0; r < numRows; r++) {
+      for (let c = 0; c < numCols; c++) {
+        const centerX = MAP_SIZE / 2;
+        const centerY = MAP_SIZE / 2;
+        const cellCenterX = c * colWidth + colWidth / 2;
+        const cellCenterY = r * rowHeight + rowHeight / 2;
+        
+        // Keep spawning area clear (250px radius around center)
+        const distToCenter = Math.hypot(cellCenterX - centerX, cellCenterY - centerY);
+        if (distToCenter < 250) {
+          continue;
+        }
+        
+        // 80% chance of placing exactly 1 scenery item in this cell.
+        // This ensures a lovely density of ~320 elements across the whole map,
+        // but perfectly uniform and with ZERO dense overdrawing clusters.
+        if (Math.random() < 0.80) {
+          const jitterX = 30 + Math.random() * (colWidth - 60);
+          const jitterY = 30 + Math.random() * (rowHeight - 60);
+          
+          scenery.push({
+            x: c * colWidth + jitterX,
+            y: r * rowHeight + jitterY,
+            t: Math.floor(Math.random() * 6), // 0 to 5 (Lantern, Barricade, Tree, Flag, Catapult, Fence)
+            sz: 24 + Math.random() * 32
+          });
+        }
+      }
+    }
+    sceneryRef.current = scenery;
 
     const initialSkills: Skill[] = sect.skills.map((nm, i) => ({
       name: nm,
@@ -102,12 +134,20 @@ export default function App() {
         mp: 100,
         maxMp: 100,
         atk: 25,
+        rage: 0,
+        maxRage: 100,
+        rageActive: false,
+        rageTimer: 0,
         target: null,
         moving: false,
         atkCd: 0,
         dead: false,
         color: sect.color,
         icon: sect.icon,
+        sectId: sectId,
+        skillComboHistory: [],
+        comboTimer: 0,
+        activeCombo: null,
         equipment: {
           weapon: null,
           armor: null,
@@ -130,7 +170,9 @@ export default function App() {
       },
       skills: initialSkills,
       entities: [],
-      drops: []
+      drops: [],
+      livesPurchased: 0,
+      companion: getCompanionForSect(sectId)
     };
 
     setGameState(initialState);

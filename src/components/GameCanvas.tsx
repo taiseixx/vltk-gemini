@@ -14,7 +14,79 @@ import {
   WEAPON_NAMES,
   RARITIES,
   EQUIPMENT_NAME_MAP,
+  SECTS,
 } from "../constants";
+import { checkAndTriggerCombo } from "../utils/comboHelper";
+import { cc } from "../lib/cocos";
+import grassImg from "../assets/images/battlefield_grass_texture_1779384494268.png";
+import barricadeImg from "../assets/images/battlefield_barricade_1779384521972.png";
+import treeImg from "../assets/images/battlefield_tree_1779552597802.png";
+import catapultImg from "../assets/images/battlefield_catapult_1779552618735.png";
+import flagImg from "../assets/images/battlefield_flag_1779552636708.png";
+import lanternImg from "../assets/images/battlefield_lantern_1779552656984.png";
+import fenceImg from "../assets/images/battlefield_fence_1779552677346.png";
+
+function removeBlackBackground(img: HTMLImageElement, tolerance = 45): CanvasImageSource {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return img;
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, img.width, img.height);
+    const data = imgData.data;
+
+    // Sample the corners to detect the natural background color
+    const corners = [
+      { x: 2, y: 2 },
+      { x: img.width - 3, y: 2 },
+      { x: 2, y: img.height - 3 },
+      { x: img.width - 3, y: img.height - 3 }
+    ];
+
+    let bgR = 0, bgG = 0, bgB = 0;
+    let sampledCount = 0;
+    corners.forEach(p => {
+      if (p.x >= 0 && p.x < img.width && p.y >= 0 && p.y < img.height) {
+        const idx = (p.y * img.width + p.x) * 4;
+        bgR += data[idx];
+        bgG += data[idx + 1];
+        bgB += data[idx + 2];
+        sampledCount++;
+      }
+    });
+
+    if (sampledCount > 0) {
+      bgR = Math.round(bgR / sampledCount);
+      bgG = Math.round(bgG / sampledCount);
+      bgB = Math.round(bgB / sampledCount);
+    }
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+
+      const diff = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
+      
+      // Safety fallbacks: absolute black & bright whites
+      const isExtremeBlack = r < 40 && g < 40 && b < 40;
+      
+      // Catapult background is off-white (around 220-255). This targets any near-white pixels cleanly:
+      const isExtremeWhite = r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 25 && Math.abs(g - b) < 25;
+
+      if (diff < tolerance || isExtremeBlack || isExtremeWhite) {
+        data[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+  } catch (err) {
+    console.error("Alpha mask processing error:", err);
+    return img;
+  }
+}
 
 interface Props {
   gameState: GameState;
@@ -50,12 +122,127 @@ export default function GameCanvas({
   const pointerDownRef = useRef(false);
   const startPointerRef = useRef<{ clientX: number, clientY: number } | null>(null);
 
+  const grassImgRef = useRef<HTMLImageElement | null>(null);
+  const barricadeImgRef = useRef<CanvasImageSource | null>(null);
+  const treeImgRef = useRef<CanvasImageSource | null>(null);
+  const catapultImgRef = useRef<CanvasImageSource | null>(null);
+  const flagImgRef = useRef<CanvasImageSource | null>(null);
+  const lanternImgRef = useRef<CanvasImageSource | null>(null);
+  const fenceImgRef = useRef<CanvasImageSource | null>(null);
+  const companionAtkTimerRef = useRef(0);
+  const cocosSceneRef = useRef<cc.Node>(new cc.Node());
+  const cocosParticlesRef = useRef<cc.ParticleSystem>(new cc.ParticleSystem());
+
+  useEffect(() => {
+    cc.director.registerScene("BattleScene", cocosSceneRef.current);
+    cc.director.loadScene("BattleScene");
+    cocosSceneRef.current.addChild(cocosParticlesRef.current);
+  }, []);
+
+  useEffect(() => {
+    const grass = new Image();
+    grass.onload = () => {
+      grassImgRef.current = grass;
+    };
+    grass.src = grassImg;
+
+    const barricade = new Image();
+    barricade.onload = () => {
+      barricadeImgRef.current = removeBlackBackground(barricade, 55);
+    };
+    barricade.src = barricadeImg;
+
+    const tree = new Image();
+    tree.onload = () => {
+      treeImgRef.current = removeBlackBackground(tree, 55);
+    };
+    tree.src = treeImg;
+
+    const catapult = new Image();
+    catapult.onload = () => {
+      catapultImgRef.current = removeBlackBackground(catapult, 55);
+    };
+    catapult.src = catapultImg;
+
+    const flag = new Image();
+    flag.onload = () => {
+      flagImgRef.current = removeBlackBackground(flag, 55);
+    };
+    flag.src = flagImg;
+
+    const lantern = new Image();
+    lantern.onload = () => {
+      lanternImgRef.current = removeBlackBackground(lantern, 55);
+    };
+    lantern.src = lanternImg;
+
+    const fence = new Image();
+    fence.onload = () => {
+      fenceImgRef.current = removeBlackBackground(fence, 55);
+    };
+    fence.src = fenceImg;
+  }, []);
+
   const setStateAsync = (updater: (prev: GameState | null) => GameState | null) => {
     setGameState((prev) => {
       const next = updater(prev);
       if (next) Object.assign(stateRef.current, next); // Eagerly update ref
       return next;
     });
+  };
+
+  const getSectIdFromColor = (color: string): string => {
+    if (color === '#e67e22') return 'sl'; // Thiếu Lâm
+    if (color === '#3498db') return 'vd'; // Võ Đang
+    if (color === '#27ae60') return 'cb'; // Cái Bang
+    if (color === '#e91e63') return 'nm'; // Nga Mi
+    if (color === '#f39c12') return 'cl'; // Côn Lôn
+    if (color === '#9b59b6') return 'nd'; // Ngũ Độc
+    if (color === '#8a2be2') return 'tm'; // Đường Môn
+    if (color === '#00bcd4') return 'ty'; // Thủy Yên/Thúy Yên
+    if (color === '#f44336') return 'tv'; // Thiên Vương
+    if (color === '#d35400') return 'tn'; // Thiên Nhẫn
+    return '';
+  };
+
+  const getSectElement = (sectId: string): 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth' => {
+    const sectElementMap: Record<string, 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'> = {
+      sl: 'Metal',
+      tv: 'Metal',
+      cb: 'Fire',
+      tn: 'Fire',
+      tm: 'Wood',
+      nd: 'Wood',
+      vd: 'Earth',
+      cl: 'Earth',
+      nm: 'Water',
+      ty: 'Water'
+    };
+    return sectElementMap[sectId] || 'Metal';
+  };
+
+  const getElementalMultipliers = (
+    attackerElement: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth',
+    defenderElement?: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'
+  ): { mult: number; text: string; color: string } => {
+    if (!defenderElement) return { mult: 1.0, text: '', color: '' };
+    
+    const elementCounter: Record<'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth', 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'> = {
+      Metal: 'Wood',
+      Wood: 'Earth',
+      Earth: 'Water',
+      Water: 'Fire',
+      Fire: 'Metal'
+    };
+
+    const nameMap = { Metal: 'Kim', Wood: 'Mộc', Water: 'Thủy', Fire: 'Hỏa', Earth: 'Thổ' };
+
+    if (elementCounter[attackerElement] === defenderElement) {
+      return { mult: 1.5, text: `Khắc chế (${nameMap[attackerElement]} ➔ ${nameMap[defenderElement]})`, color: '#f1c40f' };
+    } else if (elementCounter[defenderElement] === attackerElement) {
+      return { mult: 0.7, text: `Bị khắc (${nameMap[attackerElement]} ⇠ ${nameMap[defenderElement]})`, color: '#7f8c8d' };
+    }
+    return { mult: 1.0, text: '', color: '' };
   };
 
   const drawHuman = (
@@ -70,38 +257,72 @@ export default function GameCanvas({
     time: number,
     hasCloak: boolean = false,
   ) => {
-    // Elegant Angelic Wings (Cloak equipment)
-    if (hasCloak) {
-      const wingFlap = Math.sin(time * 0.006) * sz * 0.5;
-      ctx.save();
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = "rgba(235, 95, 175, 0.9)"; // Magical purple/pink wings
-      ctx.fillStyle = "rgba(235, 95, 175, 0.15)";
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = "rgb(235, 95, 175)";
-      
-      // Left Wing
-      ctx.beginPath();
-      ctx.moveTo(x - sz * 0.2, y);
-      ctx.bezierCurveTo(
-        x - sz * 2.8, y - sz * 1.8 + wingFlap,
-        x - sz * 3.4, y + sz * 0.8 + wingFlap,
-        x - sz * 0.2, y + sz * 0.8
-      );
-      ctx.closePath();
-      ctx.stroke();
-      ctx.fill();
+    const sectId = getSectIdFromColor(c);
 
-      // Right Wing
+    // Elegant Angelic Wings (Cloak equipment) - Rendered behind player
+    if (hasCloak) {
+      const wingFlap = Math.sin(time * 0.008) * sz * 0.4;
+      ctx.save();
+      ctx.shadowBlur = 18;
+      
+      let mainWingColor = 'rgba(235, 95, 175, 0.95)';
+      let fillWingColor = 'rgba(235, 95, 175, 0.18)';
+      let shadowWingColor = 'rgb(235, 95, 175)';
+      
+      if (sectId === 'sl' || sectId === 'cl' || sectId === 'vd') {
+        mainWingColor = 'rgba(241, 196, 15, 0.95)';
+        fillWingColor = 'rgba(241, 196, 15, 0.2)';
+        shadowWingColor = '#f1c40f';
+      } else if (sectId === 'cb' || sectId === 'tn') {
+        mainWingColor = 'rgba(231, 76, 60, 0.95)';
+        fillWingColor = 'rgba(231, 76, 60, 0.2)';
+        shadowWingColor = '#e74c3c';
+      } else if (sectId === 'nd' || sectId === 'tm') {
+        mainWingColor = 'rgba(155, 89, 182, 0.95)';
+        fillWingColor = 'rgba(155, 89, 182, 0.2)';
+        shadowWingColor = '#9b59b6';
+      } else if (sectId === 'ty' || sectId === 'nm') {
+        mainWingColor = 'rgba(52, 152, 219, 0.95)';
+        fillWingColor = 'rgba(52, 152, 219, 0.2)';
+        shadowWingColor = '#3498db';
+      }
+      
+      ctx.strokeStyle = mainWingColor;
+      ctx.fillStyle = fillWingColor;
+      ctx.shadowColor = shadowWingColor;
+      
+      // Draw 3 layers of feathered curves for spectacular wing detailing
+      for (let layer = 0; layer < 3; layer++) {
+        const offset = layer * 4;
+        const scale = 1 - layer * 0.2;
+        ctx.lineWidth = 4 - layer * 1.2;
+        
+        ctx.beginPath();
+        ctx.moveTo(x - sz * 0.1, y + offset);
+        ctx.bezierCurveTo(
+          x - sz * 3.2 * scale, y - sz * 2.2 * scale + wingFlap,
+          x - sz * 3.8 * scale, y + sz * 1.2 * scale + wingFlap,
+          x - sz * 0.1, y + sz * 0.8
+        );
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(x + sz * 0.1, y + offset);
+        ctx.bezierCurveTo(
+          x + sz * 3.2 * scale, y - sz * 2.2 * scale + wingFlap,
+          x + sz * 3.8 * scale, y + sz * 1.2 * scale + wingFlap,
+          x + sz * 0.1, y + sz * 0.8
+        );
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fill();
+      }
+      
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.moveTo(x + sz * 0.2, y);
-      ctx.bezierCurveTo(
-        x + sz * 2.8, y - sz * 1.8 + wingFlap,
-        x + sz * 3.4, y + sz * 0.8 + wingFlap,
-        x + sz * 0.2, y + sz * 0.8
-      );
-      ctx.closePath();
-      ctx.stroke();
+      ctx.arc(x, y + sz * 0.1, sz * 0.15, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.restore();
@@ -132,6 +353,43 @@ export default function GameCanvas({
     ctx.lineTo(x - sz * 0.6, by - sz * 0.2);
     ctx.fill();
 
+    // Custom garments decorations
+    if (sectId) {
+      if (sectId === 'sl') {
+        ctx.strokeStyle = '#d35400';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, by + sz * 0.25, sz * 0.35, 0, Math.PI, false);
+        ctx.stroke();
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(x - sz * 0.2, by + sz * 0.2, sz * 0.4, sz * 0.6);
+      } else if (sectId === 'vd') {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, by + sz * 0.3, sz * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.arc(x, by + sz * 0.3, sz * 0.25, Math.PI / 2, Math.PI * 1.5);
+        ctx.fill();
+      } else if (sectId === 'nm') {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(x - sz * 0.5, by + sz * 0.3);
+        ctx.lineTo(x + sz * 0.5, by + sz * 0.3);
+        ctx.lineTo(x, by + sz * 0.8);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = '#f1c40f';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x - sz * 0.5, by + sz * 0.5);
+        ctx.lineTo(x + sz * 0.5, by + sz * 0.5);
+        ctx.stroke();
+      }
+    }
+
     // Head
     ctx.fillStyle = "#f5cba7";
     ctx.beginPath();
@@ -144,14 +402,172 @@ export default function GameCanvas({
     ctx.arc(x, by - sz * 0.6, sz * 0.55, Math.PI, Math.PI * 2);
     ctx.fill();
 
-    // Weapon (Arm animation)
+    // Weapon Animation (Arm and Physical features)
+    ctx.save();
     let armPhase = moving ? Math.sin(time * 0.015) * sz * 0.5 : 0;
-    ctx.strokeStyle = "#aaa";
-    ctx.lineWidth = isBoss ? 5 : 3;
-    ctx.beginPath();
-    ctx.moveTo(x + facing * sz * 0.5, by);
-    ctx.lineTo(x + facing * sz * 2, by - sz + armPhase);
-    ctx.stroke();
+    const hx = x + facing * sz * 0.5;
+    const hy = by + sz * 0.15;
+    const wx = x + facing * sz * 1.5;
+    const wy = by - sz * 0.3 + armPhase;
+    
+    if (sectId) {
+      if (sectId === 'sl') {
+        const spinA = (time * 0.005) % (Math.PI * 2);
+        ctx.translate(wx, wy);
+        ctx.rotate(spinA);
+        ctx.strokeStyle = '#d4af37';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-sz * 1.8, 0);
+        ctx.lineTo(sz * 1.8, 0);
+        ctx.stroke();
+        ctx.fillStyle = '#f39c12';
+        ctx.beginPath();
+        ctx.arc(-sz * 1.8, 0, sz * 0.3, 0, Math.PI * 2);
+        ctx.arc(sz * 1.8, 0, sz * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.rotate(-spinA);
+        ctx.translate(-wx, -wy);
+      } 
+      else if (sectId === 'vd') {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#3498db';
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = '#3498db';
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(wx, wy - sz * 0.5);
+        ctx.stroke();
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.moveTo(hx + facing * 4, hy - 4);
+        ctx.lineTo(hx + facing * 8, hy + 4);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(x - facing * sz * 0.5, hy);
+        ctx.lineTo(x - facing * sz * 1.2, hy - sz);
+        ctx.stroke();
+      } 
+      else if (sectId === 'cb') {
+        ctx.strokeStyle = '#27ae60';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(wx + facing * sz * 0.5, wy - sz * 0.4);
+        ctx.stroke();
+        ctx.fillStyle = '#2ecc71';
+        ctx.beginPath();
+        ctx.arc(hx + (wx - hx) * 0.5, hy + (wy - hy) * 0.5, 3.5, 0, Math.PI * 2);
+        ctx.arc(wx, wy, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      } 
+      else if (sectId === 'nm') {
+        ctx.strokeStyle = '#e91e63';
+        ctx.lineWidth = 2.5;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#e91e63';
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(wx, wy - sz * 0.4);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(wx, wy - sz * 0.4, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } 
+      else if (sectId === 'cl') {
+        ctx.strokeStyle = '#f39c12';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(wx, wy - sz * 0.6);
+        ctx.stroke();
+        if (Math.random() < 0.4) {
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(hx, hy);
+          ctx.lineTo(hx + (wx - hx) * 0.5 + (Math.random() - 0.5) * 8, hy + (wy - hy) * 0.5 + (Math.random() - 0.5) * 8);
+          ctx.lineTo(wx, wy - sz * 0.6);
+          ctx.stroke();
+        }
+      } 
+      else if (sectId === 'nd') {
+        ctx.strokeStyle = '#9b59b6';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.quadraticCurveTo(wx, wy, wx + facing * sz * 0.5, wy - sz * 0.6);
+        ctx.stroke();
+        ctx.fillStyle = '#2ecc71';
+        ctx.beginPath();
+        ctx.arc(wx + facing * sz * 0.5, wy - sz * 0.6, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      } 
+      else if (sectId === 'tm') {
+        ctx.fillStyle = '#7f8c8d';
+        ctx.fillRect(hx, hy - 3, sz * 0.8 * facing, 6);
+        ctx.fillStyle = '#8a2be2';
+        ctx.fillRect(hx + sz * 0.5 * facing, hy - sz * 0.4, 3 * facing, sz * 0.8);
+      } 
+      else if (sectId === 'ty') {
+        ctx.strokeStyle = '#00bcd4';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(wx, wy, sz * 0.4, Math.PI * 0.5, Math.PI * 1.5, facing > 0);
+        ctx.stroke();
+      } 
+      else if (sectId === 'tv') {
+        ctx.strokeStyle = '#f44336';
+        ctx.lineWidth = 4;
+        const sLength = sz * 2.8;
+        const txPointX = hx + facing * sLength;
+        const txPointY = hy - sz * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(txPointX, txPointY);
+        ctx.stroke();
+        ctx.fillStyle = '#f44336';
+        ctx.beginPath();
+        ctx.arc(txPointX - facing * sz * 0.3, txPointY + sz * 0.1, sz * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#d35400';
+        ctx.beginPath();
+        ctx.moveTo(txPointX, txPointY);
+        ctx.lineTo(txPointX - facing * sz * 0.4, txPointY - sz * 0.1);
+        ctx.lineTo(txPointX - facing * sz * 0.4, txPointY + sz * 0.1);
+        ctx.closePath();
+        ctx.fill();
+      } 
+      else if (sectId === 'tn') {
+        ctx.strokeStyle = '#d35400';
+        ctx.lineWidth = 3;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#d35400';
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(wx, wy - sz * 0.3);
+        ctx.stroke();
+        if (Math.random() < 0.6) {
+          ctx.fillStyle = '#e67e22';
+          ctx.beginPath();
+          ctx.moveTo(wx, wy - sz * 0.3);
+          ctx.lineTo(wx + (Math.random() - 0.5) * 6, wy - sz * 0.6 - Math.random() * 8);
+          ctx.lineTo(wx - facing * 4, wy - sz * 0.3);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    } else {
+      ctx.strokeStyle = "#aaa";
+      ctx.lineWidth = isBoss ? 5 : 3;
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(wx, wy);
+      ctx.stroke();
+    }
+    ctx.restore();
   };
 
   const getBossCount = (stage: number): number => {
@@ -178,10 +594,12 @@ export default function GameCanvas({
 
     // Số đợt quái tăng đột khởi dồn dập sau stage 20
     const spawnCount = stage > 20 ? Math.min(22, 6 + Math.floor((stage - 20) * 1.5)) : 6;
+    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
 
     for (let i = 0; i < spawnCount; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 300 + Math.random() * 300;
+      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
       newEntities.push({
         id: Math.random(),
         isBoss: false,
@@ -194,6 +612,7 @@ export default function GameCanvas({
         size: 16,
         atkCd: 0,
         color: stage > 20 ? "#8e44ad" : "#7f8c8d",
+        element: el,
       });
     }
     entitiesRef.current = [...entitiesRef.current, ...newEntities];
@@ -208,13 +627,18 @@ export default function GameCanvas({
 
     const p = stateRef.current.player;
     const newBosses: Entity[] = [];
+    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
+    const nameElPrefixes = { Metal: '[KIM]', Wood: '[MỘC]', Water: '[THỦY]', Fire: '[HỎA]', Earth: '[THỔ]' };
+
     for (let i = 0; i < actualSubBossCount; i++) {
       const angle = (Math.PI * 2 / actualSubBossCount) * i;
+      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
+      const prefix = nameElPrefixes[el];
       newBosses.push({
         id: Math.random(),
         isBoss: false,
         isSubBoss: true,
-        name: stage > 20 ? `🔴 Tam Ma Vương Hộ Pháp ${i + 1}` : `Tịnh Vương Hộ Pháp ${i + 1}`,
+        name: stage > 20 ? `${prefix} 🔴 Tam Ma Vương Hộ Pháp ${i + 1}` : `${prefix} Tịnh Vương Hộ Pháp ${i + 1}`,
         x: p.x + Math.cos(angle) * 320,
         y: p.y + Math.sin(angle) * 320,
         hp: hpBase,
@@ -224,6 +648,7 @@ export default function GameCanvas({
         size,
         atkCd: 0,
         color: stage > 20 ? "#d35400" : "#16a085",
+        element: el,
       });
     }
 
@@ -240,12 +665,17 @@ export default function GameCanvas({
 
     const p = stateRef.current.player;
     const newBosses: Entity[] = [];
+    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
+    const nameElPrefixes = { Metal: '[KIM]', Wood: '[MỘC]', Water: '[THỦY]', Fire: '[HỎA]', Earth: '[THỔ]' };
+
     for (let i = 0; i < count; i++) {
       const angle = (Math.PI * 2 / count) * i;
+      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
+      const prefix = nameElPrefixes[el];
       newBosses.push({
         id: Math.random(),
         isBoss: true,
-        name: isLateGame ? `🔥 VÔ THỰNG DIÊM VƯƠNG TRÙM CUỐI` : `Trùm Cuối Đại Sứ (Boss ${i + 1})`,
+        name: isLateGame ? `${prefix} 🔥 VÔ THỰNG DIÊM VƯƠNG TRÙM CUỐI` : `${prefix} Trùm Cuối Đại Sứ (Boss ${i + 1})`,
         x: p.x + Math.cos(angle) * 350,
         y: p.y + Math.sin(angle) * 350,
         hp: hpBase,
@@ -255,6 +685,7 @@ export default function GameCanvas({
         size,
         atkCd: 0,
         color: isLateGame ? "#9b59b6" : "#c0392b",
+        element: el,
       });
     }
 
@@ -277,10 +708,82 @@ export default function GameCanvas({
         // Let's declare aura timer ref or track elapsed
       }
 
-      // Regains
+      // Regains & Five Elements Burst Mode Tick
       if (!p.dead) {
-        p.hp = Math.min(p.maxHp, p.hp + (p.currentStats.con * 1.5 + 4) * dt);
-        p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 3.0 + 8) * dt);
+        if (p.comboTimer && p.comboTimer > 0) {
+          p.comboTimer -= dt;
+          if (p.comboTimer <= 0) {
+            p.skillComboHistory = [];
+          }
+        }
+        if (p.activeCombo && p.activeCombo.timer > 0) {
+          p.activeCombo.timer -= dt;
+          if (p.activeCombo.timer <= 0) {
+            p.activeCombo = null;
+          }
+        }
+
+        if (p.rageActive) {
+          p.rageTimer = Math.max(0, (p.rageTimer || 8.0) - dt);
+          p.rage = Math.floor((p.rageTimer / 8.0) * (p.maxRage || 100));
+          
+          // Regenerate HP continuously: +2% Max HP per second in burst mode!
+          p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.02 + p.currentStats.con * 1.5 + 4) * dt);
+          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 3.0 + 8) * dt);
+          
+          // Generate customized Elemental trail particles surrounding player!
+          if (Math.random() < 0.4) {
+            const sectId = getSectIdFromColor(p.color);
+            const playerEl = getSectElement(sectId);
+            const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
+            const particleColor = elColor[playerEl] || '#fff';
+            
+            const radius = 25 + Math.random() * 20;
+            const angle = Math.random() * Math.PI * 2;
+            particlesRef.current.push({
+              x: p.x + Math.cos(angle) * radius,
+              y: p.y + Math.sin(angle) * radius,
+              vx: -Math.sin(angle) * 70,
+              vy: Math.cos(angle) * 70,
+              life: 0.6,
+              color: particleColor,
+              size: 3 + Math.random() * 2,
+            });
+          }
+          
+          if (p.rageTimer <= 0) {
+            p.rageActive = false;
+            p.rage = 0;
+            addNotification("🛡️ Trạng thái bộc phát Ngũ Hành kết thúc!", "#95a5a6");
+          }
+        } else {
+          p.hp = Math.min(p.maxHp, p.hp + (p.currentStats.con * 1.5 + 4) * dt);
+          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 3.0 + 8) * dt);
+          
+          if (p.rage >= (p.maxRage || 100)) {
+            p.rageActive = true;
+            p.rageTimer = 8.0;
+            p.rage = p.maxRage || 100;
+            shakeRef.current = 15;
+            addNotification("🔥 BỘC PHÁT THẾ NGŨ HÀNH 🔥", p.color);
+            
+            // Spawn spectacular shockwave ring upon burst!
+            particlesRef.current.push({
+              x: p.x, y: p.y, vx: 0, vy: 0, life: 1.0, maxLife: 1.0, color: p.color, size: 25, type: 'ring'
+            });
+            particlesRef.current.push({
+              x: p.x, y: p.y, vx: 0, vy: 0, life: 0.6, maxLife: 0.6, color: '#ffffff', size: 12, type: 'shockwave'
+            });
+          }
+        }
+
+        // Decay Combo active state
+        if (p.activeCombo) {
+          p.comboTimer = Math.max(0, (p.comboTimer || 0) - dt);
+          if (p.comboTimer <= 0) {
+            p.activeCombo = null;
+          }
+        }
       }
 
       // Death wait
@@ -342,7 +845,7 @@ export default function GameCanvas({
       }
 
       // Auto target
-      if (prev.auto && !p.target) {
+      if (prev.auto && !p.target && !p.moving) {
         let minDist = 400;
         let nearest: Entity | null = null;
         entitiesRef.current.forEach((e) => {
@@ -577,25 +1080,71 @@ export default function GameCanvas({
           }
         }
         
-        const damage = (sk.baseDamage + sk.level * 25 + p.currentStats.int * 5) * buffs.dmgMult;
+        const combo = checkAndTriggerCombo(
+          firedSkillIdx,
+          p,
+          tx,
+          ty,
+          actualRange,
+          particlesRef.current,
+          textsRef.current,
+          shakeRef
+        );
+        const comboMult = combo ? combo.multiplier : 1.0;
+        const damage = (sk.baseDamage + sk.level * 25 + p.currentStats.int * 5) * buffs.dmgMult * comboMult;
+        const sectId = getSectIdFromColor(p.color);
+        const playerEl = getSectElement(sectId);
         
         entitiesRef.current.forEach(e => {
           const dist = Math.hypot(e.x - tx, e.y - ty);
           if (dist <= actualRange) {
-            // High-tier Agi driven Crits ! (Base Chance: 10% + AGI stats * 0.5%)
+            const elementInfo = getElementalMultipliers(playerEl, e.element);
             const isCrit = Math.random() < (0.10 + p.currentStats.agi * 0.005);
-            let d = Math.floor(damage * (0.8 + Math.random() * 0.4));
+            
+            let elementalDamage = damage * elementInfo.mult;
+            if (p.rageActive) elementalDamage *= 1.5; // active burst 1.5x damage!
+            
+            let d = Math.max(1, Math.floor(elementalDamage * (0.8 + Math.random() * 0.4)));
             if (isCrit) {
+              const Math_floor = Math.floor;
               const critDb = buffs.critDmgMult || 1.5;
-              d = Math.floor(d * critDb);
+              d = Math_floor(d * critDb);
             }
+            
+            // Accumulate player rage on skill target hit
+            if (!p.dead && !p.rageActive) {
+              let accum = 1;
+              if (isCrit) accum += 1; // Crit bonus
+              if (e.hp - d <= 0) accum += 2; // Kill bonus
+              p.rage = Math.min(p.maxRage, p.rage + accum);
+            }
+
             e.hp -= d;
+            
+            // Build element-themed notification text
+            const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
+            const elName = { Metal: 'KIM', Wood: 'MỘC', Water: 'THỦY', Fire: 'HỎA', Earth: 'THỔ' };
+            
+            let skillText = isCrit ? `💥 CHÍ MẠNG! -${d}` : `-${d}`;
+            let skillColor = isCrit ? '#f1c40f' : sk.color;
+            
+            if (combo) {
+              skillText = isCrit ? `🔥 COMBO CRIT! -${d}` : `🔥 COMBO! -${d}`;
+              skillColor = combo.color;
+            } else if (elementInfo.mult > 1.0) {
+              skillText = isCrit ? `💥 KHẮC CHẾ CRIT! -${d}` : `⚡ ${elName[playerEl]} KHẮC! -${d}`;
+              skillColor = elColor[playerEl];
+            } else if (p.rageActive) {
+              skillText = isCrit ? `🔥 BỘC PHÁT CRIT! -${d}` : `🔥 BỘC PHÁT! -${d}`;
+              skillColor = '#ff4d00';
+            }
+            
             textsRef.current.push({
               id: Math.random(),
               x: e.x + (Math.random() - 0.5) * 20,
               y: e.y - 20 - Math.random() * 20,
-              text: isCrit ? `💥 CHÍ MẠNG! -${d}` : `-${d}`,
-              color: isCrit ? '#f1c40f' : sk.color,
+              text: skillText,
+              color: skillColor,
               life: isCrit ? 1.8 : 1.5
             });
           }
@@ -603,13 +1152,15 @@ export default function GameCanvas({
       }
 
 
-      // Item Pickup
+      // Item Pickup (Wide auto-loot range 180px & +15% gold boost if companion is active)
       let goldEarned = 0;
+      const pickupRange = prev.companion ? 180 : 50;
       for (let i = dropsRef.current.length - 1; i >= 0; i--) {
         const d = dropsRef.current[i];
-        if (Math.hypot(p.x - d.x, p.y - d.y) < 50) {
+        if (Math.hypot(p.x - d.x, p.y - d.y) < pickupRange) {
           const goldVal = equipItem(d, p, buffs, prev.stage);
-          goldEarned += goldVal;
+          const boostedGold = prev.companion ? Math.floor(goldVal * 1.15) : goldVal;
+          goldEarned += boostedGold;
           dropsRef.current.splice(i, 1);
         }
       }
@@ -650,30 +1201,97 @@ export default function GameCanvas({
     srcX: number,
     srcY: number,
   ) => {
-    const damage = Math.floor(amt * (0.8 + Math.random() * 0.4));
-    e.hp -= damage;
+    const pRef = stateRef.current.player;
+    const sectId = getSectIdFromColor(pRef.color);
+    const playerEl = getSectElement(sectId);
+    const elementInfo = getElementalMultipliers(playerEl, e.element);
+    
+    // Sát thương nhân sắc Sinh Khắc (Omega)
+    const elementalDamage = amt * elementInfo.mult;
+    
+    // Burst Mode (Rage active) confers 1.5x damage supercharge!
+    const burstMult = pRef.rageActive ? 1.5 : 1.0;
+    const finalDamage = Math.max(1, Math.floor(elementalDamage * burstMult * (0.8 + Math.random() * 0.4)));
+
+    // Accumulate player Rage point
+    if (!pRef.dead && !pRef.rageActive) {
+      let accum = 1; // Base hit
+      if (e.hp - finalDamage <= 0) accum += 2; // Kill bonus
+      pRef.rage = Math.min(pRef.maxRage, pRef.rage + accum);
+    }
+
+    e.hp -= finalDamage;
+
+    // Build themed damage outputs
+    const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
+    const elName = { Metal: 'KIM', Wood: 'MỘC', Water: 'THỦY', Fire: 'HỎA', Earth: 'THỔ' };
+    
+    let dmgText = finalDamage.toString();
+    let txtColor = col;
+    
+    if (elementInfo.mult > 1.0) {
+      dmgText = `⚡ ${elName[playerEl]} KHẮC! -${finalDamage}`;
+      txtColor = elColor[playerEl];
+    } else if (elementInfo.mult < 1.0) {
+      dmgText = `🛡️ BỊ KHẮC -${finalDamage}`;
+      txtColor = '#7f8c8d';
+    } else {
+      txtColor = elColor[playerEl] || col;
+    }
+
+    if (pRef.rageActive) {
+      dmgText = `🔥 BỘC PHÁT! -${finalDamage}`;
+      txtColor = '#ff3300';
+    }
+
     textsRef.current.push({
       id: Math.random(),
       x: e.x,
       y: e.y - 30,
-      text: damage.toString(),
-      color: col,
-      life: 1,
+      text: dmgText,
+      color: txtColor,
+      life: pRef.rageActive ? 1.6 : 1.2,
     });
 
-    // Particles
-    if (particlesRef.current.length < 80) {
-      for (let i = 0; i < 5; i++) {
+    // Spawn extremely smooth, animated Cocos-Engine Custom Label
+    const cocosLabel = new cc.Label(dmgText, pRef.rageActive ? 17 : 13, txtColor);
+    cocosLabel.x = e.x;
+    cocosLabel.y = e.y - 30;
+    cocosLabel.strokeColor = "#0a0a0a";
+    cocosLabel.strokeWidth = 3.5;
+    cocosLabel.fontFamily = "system-ui, -apple-system, sans-serif";
+    
+    const distanceUp = -50 - Math.random() * 30;
+    const animDuration = pRef.rageActive ? 1.3 : 0.95;
+    cocosLabel.runAction(
+      cc.sequence(
+        cc.moveTo(animDuration, e.x, e.y - 30 + distanceUp),
+        cc.callFunc(() => {
+          cocosSceneRef.current.removeChild(cocosLabel);
+        })
+      )
+    );
+    cocosLabel.runAction(cc.fadeTo(animDuration, 0));
+    cocosSceneRef.current.addChild(cocosLabel);
+
+    // Particles themed by Element or default
+    const particleColor = elColor[playerEl] || col;
+    
+    // Trigger Cocos-based Particle System for premium rendering spark impacts
+    cocosParticlesRef.current.spawn(e.x, e.y, particleColor, pRef.rageActive ? 3.5 : 2.5, pRef.rageActive ? 14 : 7);
+    if (particlesRef.current.length < 120) {
+      for (let i = 0; i < (pRef.rageActive ? 8 : 5); i++) {
         const angle =
           Math.atan2(e.y - srcY, e.x - srcX) + (Math.random() - 0.5);
+        const speed = (pRef.rageActive ? 220 : 150) + Math.random() * 80;
         particlesRef.current.push({
           x: e.x,
           y: e.y,
-          vx: Math.cos(angle) * 150,
-          vy: Math.sin(angle) * 150,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
           life: 0.5,
-          color: col,
-          size: 2,
+          color: particleColor,
+          size: pRef.rageActive ? 3.5 : 2,
         });
       }
     }
@@ -695,11 +1313,14 @@ export default function GameCanvas({
             prev.buffs.rlGold *
             goldDecayFactor
         );
-        const expGain =
+        const compExist = prev.companion !== null && prev.companion !== undefined;
+        const expGain = Math.floor(
           (e.isBoss ? 100 : 15) *
           Math.pow(1.1, prev.stage) *
           prev.buffs.resMult *
-          prev.buffs.rlExp;
+          prev.buffs.rlExp *
+          (compExist ? 1.15 : 1.0)
+        );
 
         let newExp = prev.exp + expGain;
         let newLevel = prev.player.level;
@@ -715,6 +1336,23 @@ export default function GameCanvas({
           addNotification(`⚡ LÊN CẤP ${newLevel}!`, "#f1c40f");
         }
 
+        let companion = prev.companion;
+        if (companion) {
+          companion = { ...companion };
+          companion.exp += expGain * 0.5;
+          const maxCompExp = 120 * companion.level;
+          if (companion.exp >= maxCompExp) {
+            companion.exp -= maxCompExp;
+            companion.level += 1;
+            const armorLvl = companion.equipment.armor?.upgradeLvl || 0;
+            const clawLvl = companion.equipment.weapon?.upgradeLvl || 0;
+            companion.maxHp = 150 + companion.level * 25 + armorLvl * 50;
+            companion.hp = companion.maxHp;
+            companion.atk = 15 + companion.level * 4 + clawLvl * 5;
+            addNotification(`✨ ĐỒNG HÀNH ${companion.name.toUpperCase()} LÊN CẤP ${companion.level}!`, "#ffca28");
+          }
+        }
+
         if (e.isBoss || Math.random() < 0.15) {
           generateDrop(e.x, e.y, e.isBoss, prev.stage);
         }
@@ -723,6 +1361,7 @@ export default function GameCanvas({
           ...prev,
           gold: prev.gold + goldGain,
           exp: newExp,
+          companion,
           mobsKilled: prev.mobsKilled + 1,
           player: {
             ...prev.player,
@@ -746,17 +1385,18 @@ export default function GameCanvas({
     stage: number,
   ) => {
     let roll = Math.random();
-    if (isBoss) roll *= 0.15; // Better drops for bosses!
+    // Bosses give much better loot, but still keeps gold/red/pink rare
+    if (isBoss) roll *= 0.12; 
 
     let rIdx = 0;
-    if (roll < 0.01) rIdx = 7;      // pink (1%)
-    else if (roll < 0.035) rIdx = 6; // crimson (2.5%)
-    else if (roll < 0.08) rIdx = 5;  // gold_rarity (4.5%)
-    else if (roll < 0.15) rIdx = 4;  // emerald (7%)
-    else if (roll < 0.28) rIdx = 3;  // legendary (13%)
-    else if (roll < 0.45) rIdx = 2;  // epic (17%)
-    else if (roll < 0.70) rIdx = 1;  // rare (25%)
-    else rIdx = 0;                  // common
+    if (roll < 0.001) rIdx = 7;      // pink - Vô Thượng Thánh Thể (0.1% base)
+    else if (roll < 0.004) rIdx = 6; // crimson - Huyết Ảnh (0.3% base)
+    else if (roll < 0.014) rIdx = 5; // gold_rarity - Hoàng Kim (1.0% base)
+    else if (roll < 0.045) rIdx = 4; // emerald (3.1% base)
+    else if (roll < 0.115) rIdx = 3; // legendary (7.0% base)
+    else if (roll < 0.30) rIdx = 2;  // epic (18.5% base)
+    else if (roll < 0.65) rIdx = 1;  // rare (35% base)
+    else rIdx = 0;                  // common (35% base)
 
     const types: EquipmentType[] = [
       "weapon",
@@ -770,7 +1410,30 @@ export default function GameCanvas({
     ];
     const type = types[Math.floor(Math.random() * types.length)];
     const rarity = RARITIES[rIdx];
-    const power = stage * RARITY_MULTIPLIERS[rarity];
+
+    // Unlocks larger range of tiers early-game, cap at 9 (Cửu Đẳng)
+    const maxPossibleTier = Math.min(9, Math.max(3, stage + 1));
+    
+    // Balanced, exciting, progression-tuned tier distribution!
+    const randRoll = Math.random();
+    let tier = 1;
+    if (randRoll < 0.35) {
+      // 35% chance to roll current max tier
+      tier = maxPossibleTier;
+    } else if (randRoll < 0.60) {
+      // 25% chance to roll max - 1
+      tier = Math.max(1, maxPossibleTier - 1);
+    } else if (randRoll < 0.80) {
+      // 20% chance to roll max - 2
+      tier = Math.max(1, maxPossibleTier - 2);
+    } else {
+      // 20% chance to roll a fully random tier up to max
+      tier = Math.max(1, Math.floor(1 + Math.random() * maxPossibleTier));
+    }
+
+    // Apply high tier multiplier (+35% more base power per higher tier representing deep VLTK upgrade levels!)
+    const tierBonus = 1 + (tier - 1) * 0.35;
+    const power = stage * RARITY_MULTIPLIERS[rarity] * tierBonus;
     const name = EQUIPMENT_NAME_MAP[type][rarity] || "Vô Danh Bảo Vật";
 
     dropsRef.current.push({
@@ -781,6 +1444,7 @@ export default function GameCanvas({
       rarity,
       power,
       name,
+      tier,
     });
   };
 
@@ -797,6 +1461,7 @@ export default function GameCanvas({
         rarity: item.rarity,
         power: item.power,
         name: item.name,
+        tier: item.tier,
       };
 
       // Recalc stats buffs
@@ -831,6 +1496,11 @@ export default function GameCanvas({
         (100 + p.currentStats.con * 20) * buffs.hpMult,
       );
       p.maxHp = newMaxHp;
+      
+      const newMaxMp = Math.floor(
+        (100 + p.currentStats.nei * 15) * 1.0,
+      );
+      p.maxMp = newMaxMp;
       p.atk = Math.floor((10 + p.currentStats.str * 3) * buffs.dmgMult);
 
       addNotification(`Nhặt được [${item.name}]`, RARITY_COLORS[item.rarity]);
@@ -859,6 +1529,62 @@ export default function GameCanvas({
     lastTimeRef.current = time;
 
     update(dt);
+    cc.director.update(dt);
+
+    // Companion Autonomous Battle Strike (Tốc đánh, kĩ năng theo đẳng cấp & trang bị!)
+    const comp = stateRef.current.companion;
+    if (comp && stateRef.current.state === "PLAYING") {
+      companionAtkTimerRef.current -= dt;
+      if (companionAtkTimerRef.current <= 0) {
+        companionAtkTimerRef.current = Math.max(1.0, 4.5 - comp.level * 0.15);
+
+        const p = stateRef.current.player;
+        let minDist = 350;
+        let nearest: any = null;
+        entitiesRef.current.forEach((e) => {
+          const d = Math.hypot(p.x - e.x, p.y - e.y);
+          if (d < minDist && e.hp > 0) {
+            minDist = d;
+            nearest = e;
+          }
+        });
+
+        if (nearest) {
+          const clawLvl = comp.equipment.weapon?.upgradeLvl || 0;
+          const compDamage = Math.floor((15 + comp.level * 4 + clawLvl * 5) * (1 + comp.level * 0.05));
+          
+          nearest.hp -= compDamage;
+          
+          // Spawn beautiful trail effect from companion to nearest target
+          const stepCount = 8;
+          for (let i = 0; i <= stepCount; i++) {
+            const ratio = i / stepCount;
+            const px = p.x + (nearest.x - p.x) * ratio;
+            const py = p.y + (nearest.y - p.y) * ratio;
+            particlesRef.current.push({
+              x: px,
+              y: py,
+              vx: (Math.random() - 0.5) * 30,
+              vy: (Math.random() - 0.5) * 30,
+              life: 0.35,
+              color: "#f1c40f",
+              size: 2.2
+            });
+          }
+
+          // Styled yellow floating damage text
+          textsRef.current.push({
+            id: Math.random(),
+            x: nearest.x,
+            y: nearest.y - 40,
+            text: `☯️ [${comp.name}] HỒ TRỢ KÍCH SÁT -${compDamage}`,
+            color: "#ffca28",
+            life: 1.4
+          });
+        }
+      }
+    }
+
     render(time);
     requestRef.current = requestAnimationFrame(loop);
   };
@@ -870,7 +1596,7 @@ export default function GameCanvas({
     if (!ctx) return;
 
     const p = stateRef.current.player;
-    const zoom = canvas.width < 768 ? 0.72 : 0.84;
+    const zoom = canvas.width < 768 ? 0.82 : 0.94;
     const viewWidth = canvas.width / zoom;
     const viewHeight = canvas.height / zoom;
 
@@ -881,18 +1607,76 @@ export default function GameCanvas({
     const cx = cameraRef.current.x + (Math.random() - 0.5) * (shakeRef.current / zoom);
     const cy = cameraRef.current.y + (Math.random() - 0.5) * (shakeRef.current / zoom);
 
-    // Background: Grassy Field
-    ctx.fillStyle = "#0c170e"; // Very dark green grass
+    // Dynamic stage biome base color
+    const cycle = Math.floor((stateRef.current.stage - 1) / 10) % 4;
+    let baseColor = "#1a3a22"; // Forest - richer dark green
+    if (cycle === 1) baseColor = "#3c2e1f"; // Desert - dusty warm brown
+    else if (cycle === 2) baseColor = "#1f2d3d"; // Mountain - cool dark blue gray
+    else if (cycle === 3) baseColor = "#223528"; // Plains - soft sage green
+
+    ctx.fillStyle = baseColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Zoom the entire world representation
     ctx.save();
     ctx.scale(zoom, zoom);
 
+    // Draw realistic repeatable grass texture as a master underlay
+    ctx.save();
+    ctx.translate(-cx, -cy);
+    
+    // Fill the battlefield MAP_SIZE with a healthy base solid color (so it's not totally black even without the image!)
+    let biomeMapFill = "#22472b"; // default forest - rich warm green
+    if (cycle === 1) biomeMapFill = "#6e5235"; // Desert - golden warm sands 
+    else if (cycle === 2) biomeMapFill = "#32455c"; // Mountain/Ice - solid ice-blue mountain terrain
+    else if (cycle === 3) biomeMapFill = "#344e3a"; // Plains - prairie green
+    
+    ctx.fillStyle = biomeMapFill;
+    ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+    if (grassImgRef.current) {
+      try {
+        const pattern = ctx.createPattern(grassImgRef.current, "repeat");
+        if (pattern) {
+          try {
+            const matrix = new DOMMatrix();
+            matrix.scaleSelf(0.22, 0.22);
+            pattern.setTransform(matrix);
+          } catch (e) {}
+          ctx.fillStyle = pattern;
+          ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+          // Apply beautiful watercolor aesthetic composite tint based on biome cycle (using soft overlays)
+          if (cycle === 0) {
+            // Forest - Lush Deep Jade Green
+            ctx.fillStyle = "rgba(10, 40, 15, 0.25)";
+          } else if (cycle === 1) {
+            // Desert - Golden Dun
+            ctx.fillStyle = "rgba(200, 120, 20, 0.22)";
+          } else if (cycle === 2) {
+            // Mountain - Ice Frost Blue
+            ctx.fillStyle = "rgba(140, 180, 220, 0.22)";
+          } else {
+            // Plains - Soft Olive Ink
+            ctx.fillStyle = "rgba(40, 60, 40, 0.18)";
+          }
+          ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        }
+      } catch (err) {
+        // Fallback already handled
+      }
+    }
+    ctx.restore();
+
     // World coordinate grid / Grass details
     ctx.save();
-    ctx.strokeStyle = "#16291a"; // Lighter dark green for grid lines (grass patterns)
-    ctx.lineWidth = 2;
+    let gridColor = "rgba(32, 58, 37, 0.4)";
+    if (cycle === 1) gridColor = "rgba(110, 80, 40, 0.35)";
+    else if (cycle === 2) gridColor = "rgba(80, 110, 150, 0.35)";
+    else if (cycle === 3) gridColor = "rgba(40, 70, 50, 0.35)";
+    
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1.5;
     const tileSize = 80;
 
     // Determine bounds in world space to draw only what's visible
@@ -916,15 +1700,20 @@ export default function GameCanvas({
     ctx.globalAlpha = 0.3; // Make grid subtle
     ctx.stroke();
     
-    // Draw grass blades and textures inside tiles
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "#203a25"; // Darker green for grass details
+    // Draw grass blades and textures inside tiles (sparsely for massive performance boost)
+    ctx.globalAlpha = 0.8;
+    let detailColor = "#203a25"; // Forest
+    if (cycle === 1) detailColor = "#523f2b"; // Desert
+    else if (cycle === 2) detailColor = "#2b3b4f"; // Mountain
+    else if (cycle === 3) detailColor = "#293e2f"; // Plains
+    
+    ctx.strokeStyle = detailColor;
     ctx.lineWidth = 1;
-    for (let x = startX; x < endX; x += tileSize) {
-      for (let y = startY; y < endY; y += tileSize) {
+    for (let x = startX; x < endX; x += tileSize * 3) {
+      for (let y = startY; y < endY; y += tileSize * 3) {
         // Randomly place some grass marks
-        const gx = x + (x * 13 % tileSize);
-        const gy = y + (y * 17 % tileSize);
+        const gx = x + (Math.abs(x * 13) % tileSize);
+        const gy = y + (Math.abs(y * 17) % tileSize);
         ctx.beginPath();
         ctx.moveTo(gx, gy);
         ctx.lineTo(gx + 4, gy - 8);
@@ -949,105 +1738,275 @@ export default function GameCanvas({
 
       if (s.t === 0) {
         // Stone Lantern
-        ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.beginPath();
-        ctx.ellipse(sx, sy, s.sz * 0.4, s.sz * 0.2, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if (lanternImgRef.current) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.32)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.sz * 0.1, s.sz * 0.45, s.sz * 0.2, 0, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.fillStyle = "#7f8c8d";
-        ctx.fillRect(sx - s.sz * 0.1, sy - s.sz * 0.6, s.sz * 0.2, s.sz * 0.6);
-        ctx.fillStyle = "#95a5a6";
-        ctx.fillRect(sx - s.sz * 0.3, sy - s.sz * 0.8, s.sz * 0.6, s.sz * 0.2);
-        ctx.fillStyle = "#ffb300";
-        ctx.fillRect(sx - s.sz * 0.2, sy - s.sz * 1.1, s.sz * 0.4, s.sz * 0.3);
-        ctx.fillStyle = "#34495e";
-        ctx.beginPath();
-        ctx.moveTo(sx, sy - s.sz * 1.4);
-        ctx.lineTo(sx - s.sz * 0.4, sy - s.sz * 1.1);
-        ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.1);
-        ctx.fill();
+          ctx.imageSmoothingEnabled = true;
+          const imgW = s.sz * 1.45;
+          const imgH = s.sz * 2.15;
+          ctx.drawImage(
+            lanternImgRef.current,
+            sx - imgW / 2,
+            sy - imgH * 0.85,
+            imgW,
+            imgH
+          );
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.4)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, s.sz * 0.4, s.sz * 0.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#7f8c8d";
+          ctx.fillRect(sx - s.sz * 0.1, sy - s.sz * 0.6, s.sz * 0.2, s.sz * 0.6);
+          ctx.fillStyle = "#95a5a6";
+          ctx.fillRect(sx - s.sz * 0.3, sy - s.sz * 0.8, s.sz * 0.6, s.sz * 0.2);
+          ctx.fillStyle = "#ffb300";
+          ctx.fillRect(sx - s.sz * 0.2, sy - s.sz * 1.1, s.sz * 0.4, s.sz * 0.3);
+          ctx.fillStyle = "#34495e";
+          ctx.beginPath();
+          ctx.moveTo(sx, sy - s.sz * 1.4);
+          ctx.lineTo(sx - s.sz * 0.4, sy - s.sz * 1.1);
+          ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.1);
+          ctx.fill();
+        }
       } else if (s.t === 1) {
-        // Market Stall
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
-        ctx.beginPath();
-        ctx.ellipse(sx, sy, s.sz, s.sz * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // Wooden Barricade
+        if (barricadeImgRef.current) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.4)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.sz * 0.15, s.sz * 1.25, s.sz * 0.45, 0, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.fillStyle = "#5c4033";
-        ctx.fillRect(sx - s.sz * 0.8, sy - s.sz, s.sz * 1.6, s.sz);
-        ctx.fillStyle = "#8b5a2b";
-        ctx.fillRect(sx - s.sz * 0.9, sy - s.sz, s.sz * 1.8, s.sz * 0.2);
-        ctx.fillStyle = "#c0392b";
-        ctx.beginPath();
-        ctx.moveTo(sx - s.sz * 1.2, sy - s.sz * 2);
-        ctx.lineTo(sx + s.sz * 1.2, sy - s.sz * 2);
-        ctx.lineTo(sx + s.sz, sy - s.sz * 1.5);
-        ctx.lineTo(sx - s.sz, sy - s.sz * 1.5);
-        ctx.fill();
-        ctx.fillStyle = "#3e2723";
-        ctx.fillRect(sx - s.sz * 0.9, sy - s.sz * 2, s.sz * 0.1, s.sz * 2);
-        ctx.fillRect(sx + s.sz * 0.8, sy - s.sz * 2, s.sz * 0.1, s.sz * 2);
+          ctx.imageSmoothingEnabled = true;
+          const imgW = s.sz * 2.3;
+          const imgH = s.sz * 1.7;
+          ctx.drawImage(
+            barricadeImgRef.current,
+            sx - imgW / 2,
+            sy - imgH * 0.72,
+            imgW,
+            imgH
+          );
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, s.sz, s.sz * 0.4, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = "#5c4033";
+          ctx.lineWidth = 6;
+          ctx.beginPath();
+          ctx.moveTo(sx - s.sz * 0.8, sy - s.sz * 0.4);
+          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 0.4);
+          ctx.stroke();
+
+          ctx.strokeStyle = "#7f8c8d";
+          ctx.lineWidth = 3;
+          for (let sp = -s.sz * 0.6; sp <= s.sz * 0.6; sp += 15) {
+             ctx.beginPath();
+             ctx.moveTo(sx + sp, sy - s.sz * 0.4);
+             ctx.lineTo(sx + sp + 5, sy - s.sz * 1.2);
+             ctx.stroke();
+          }
+        }
       } else if (s.t === 2) {
         // Green leafy tree
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
-        ctx.beginPath();
-        ctx.ellipse(sx, sy, s.sz * 0.8, s.sz * 0.4, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if (treeImgRef.current) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.3)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.sz * 0.1, s.sz * 1.0, s.sz * 0.35, 0, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.fillStyle = "#5d4037"; // Brown trunk
-        ctx.beginPath();
-        ctx.moveTo(sx - s.sz * 0.1, sy);
-        ctx.lineTo(sx - s.sz * 0.2, sy - s.sz * 1.5);
-        ctx.lineTo(sx + s.sz * 0.2, sy - s.sz * 1.5);
-        ctx.lineTo(sx + s.sz * 0.1, sy);
-        ctx.fill();
+          ctx.imageSmoothingEnabled = true;
+          const imgW = s.sz * 2.5;
+          const imgH = s.sz * 2.8;
+          ctx.drawImage(
+            treeImgRef.current,
+            sx - imgW / 2,
+            sy - imgH * 0.85,
+            imgW,
+            imgH
+          );
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.3)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, s.sz * 0.8, s.sz * 0.4, 0, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.fillStyle = "#2e7d32"; // Dark green leaves base
-        ctx.beginPath();
-        ctx.ellipse(sx, sy - s.sz * 1.8, s.sz * 1.5, s.sz * 1.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.fillStyle = "#43a047"; // Lighter green leaves top
-        ctx.beginPath();
-        ctx.ellipse(
-          sx - s.sz * 0.3,
-          sy - s.sz * 2.2,
-          s.sz * 1.1,
-          s.sz * 0.8,
-          Math.PI / 4,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
+          ctx.fillStyle = "#5d4037";
+          ctx.beginPath();
+          ctx.moveTo(sx - s.sz * 0.1, sy);
+          ctx.lineTo(sx - s.sz * 0.2, sy - s.sz * 1.5);
+          ctx.lineTo(sx + s.sz * 0.2, sy - s.sz * 1.5);
+          ctx.lineTo(sx + s.sz * 0.1, sy);
+          ctx.fill();
+
+          ctx.fillStyle = "#2e7d32";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy - s.sz * 1.8, s.sz * 1.5, s.sz * 1.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.fillStyle = "#43a047";
+          ctx.beginPath();
+          ctx.ellipse(
+            sx - s.sz * 0.3,
+            sy - s.sz * 2.2,
+            s.sz * 1.1,
+            s.sz * 0.8,
+            Math.PI / 4,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fill();
+        }
       } else if (s.t === 3) {
-        // Wall Flag / Banner
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
-        ctx.beginPath();
-        ctx.ellipse(sx, sy, s.sz * 0.3, s.sz * 0.1, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // Battle Flag / Banner
+        if (flagImgRef.current) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.25)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.sz * 0.1, s.sz * 0.5, s.sz * 0.16, 0, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.fillStyle = "#d35400";
-        ctx.fillRect(sx - 2, sy - s.sz * 2.5, 4, s.sz * 2.5);
+          ctx.imageSmoothingEnabled = true;
+          const imgW = s.sz * 1.8;
+          const imgH = s.sz * 2.9;
+          ctx.drawImage(
+            flagImgRef.current,
+            sx - imgW / 2,
+            sy - imgH * 0.88,
+            imgW,
+            imgH
+          );
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.3)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, s.sz * 0.3, s.sz * 0.1, 0, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.fillStyle = "#c0392b";
-        ctx.beginPath();
-        ctx.moveTo(sx, sy - s.sz * 2.4);
-        ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 2.4);
-        ctx.lineTo(sx + s.sz * 0.8, sy - s.sz);
-        ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.2);
-        ctx.lineTo(sx, sy - s.sz);
-        ctx.fill();
+          ctx.fillStyle = "#d35400";
+          ctx.fillRect(sx - 2, sy - s.sz * 2.5, 4, s.sz * 2.5);
 
-        ctx.strokeStyle = "#f1c40f";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(sx + s.sz * 0.2, sy - s.sz * 2.0);
-        ctx.lineTo(sx + s.sz * 0.6, sy - s.sz * 2.0);
-        ctx.moveTo(sx + s.sz * 0.4, sy - s.sz * 2.2);
-        ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.5);
-        ctx.moveTo(sx + s.sz * 0.2, sy - s.sz * 1.7);
-        ctx.lineTo(sx + s.sz * 0.6, sy - s.sz * 1.7);
-        ctx.stroke();
+          ctx.fillStyle = "#c0392b";
+          ctx.beginPath();
+          ctx.moveTo(sx, sy - s.sz * 2.4);
+          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 2.4);
+          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz);
+          ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.2);
+          ctx.lineTo(sx, sy - s.sz);
+          ctx.fill();
+
+          ctx.strokeStyle = "#f1c40f";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(sx + s.sz * 0.2, sy - s.sz * 2.0);
+          ctx.lineTo(sx + s.sz * 0.6, sy - s.sz * 2.0);
+          ctx.moveTo(sx + s.sz * 0.4, sy - s.sz * 2.2);
+          ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.5);
+          ctx.moveTo(sx + s.sz * 0.2, sy - s.sz * 1.7);
+          ctx.lineTo(sx + s.sz * 0.6, sy - s.sz * 1.7);
+          ctx.stroke();
+        }
+      } else if (s.t === 4) {
+        // Catapult (Máy bắn đá kiểu Tống Kim)
+        if (catapultImgRef.current) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.35)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.sz * 0.15, s.sz * 1.25, s.sz * 0.45, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.imageSmoothingEnabled = true;
+          const imgW = s.sz * 2.2;
+          const imgH = s.sz * 2.0;
+          ctx.drawImage(
+            catapultImgRef.current,
+            sx - imgW / 2,
+            sy - imgH * 0.76,
+            imgW,
+            imgH
+          );
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.3)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, s.sz * 1.1, s.sz * 0.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#8d6e63";
+          ctx.fillRect(sx - s.sz * 0.8, sy - s.sz * 0.2, s.sz * 1.6, s.sz * 0.3);
+          ctx.fillRect(sx - s.sz * 0.1, sy - s.sz * 1.0, s.sz * 0.2, s.sz * 0.9);
+
+          ctx.fillStyle = "#3e2723";
+          ctx.beginPath();
+          ctx.arc(sx - s.sz * 0.6, sy + s.sz * 0.1, s.sz * 0.25, 0, Math.PI * 2);
+          ctx.arc(sx + s.sz * 0.6, sy + s.sz * 0.1, s.sz * 0.25, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.strokeStyle = "#d7ccc8";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.strokeStyle = "#5d4037";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(sx + s.sz * 0.3, sy - s.sz * 0.1);
+          ctx.lineTo(sx - s.sz * 0.9, sy - s.sz * 1.2);
+          ctx.stroke();
+
+          ctx.fillStyle = "#9e9e9e";
+          ctx.beginPath();
+          ctx.arc(sx - s.sz * 0.9, sy - s.sz * 1.2, s.sz * 0.22, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (s.t === 5) {
+        // Bamboo/wooden fence
+        if (fenceImgRef.current) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.28)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy + s.sz * 0.12, s.sz * 1.15, s.sz * 0.42, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.imageSmoothingEnabled = true;
+          const imgW = s.sz * 2.2;
+          const imgH = s.sz * 1.6;
+          ctx.drawImage(
+            fenceImgRef.current,
+            sx - imgW / 2,
+            sy - imgH * 0.72,
+            imgW,
+            imgH
+          );
+          ctx.restore();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.25)";
+          ctx.beginPath();
+          ctx.ellipse(sx, sy, s.sz * 1.0, s.sz * 0.3, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = "#a1887f";
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(sx - s.sz * 0.7, sy + s.sz * 0.1);
+          ctx.lineTo(sx + s.sz * 0.5, sy - s.sz * 1.1);
+          ctx.moveTo(sx + s.sz * 0.7, sy + s.sz * 0.1);
+          ctx.lineTo(sx - s.sz * 0.5, sy - s.sz * 1.1);
+          ctx.moveTo(sx - s.sz * 0.8, sy - s.sz * 0.45);
+          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 0.45);
+          ctx.stroke();
+        }
       }
     });
 
@@ -1164,18 +2123,141 @@ export default function GameCanvas({
     });
     ctx.restore();
 
-    // Drops
+    // Drops with Majestic Luminous Light Auras (Hào Quang Ánh Sáng) and floating item badges
     dropsRef.current.forEach((d) => {
       const dx = d.x - cx;
       const dy = d.y - cy;
-      ctx.fillStyle = RARITY_COLORS[d.rarity];
+      const rColor = RARITY_COLORS[d.rarity] || "#ffffff";
+      
+      // Highlight high-tier treasures with grander visual auras
+      const isSuperRare = d.rarity === 'pink' || d.rarity === 'crimson' || d.rarity === 'gold_rarity';
+      const baseRadius = isSuperRare ? 38 : 26;
+      
+      // Gentle breathing scale factor
+      const pulse = 1 + Math.sin(time * 0.003) * 0.08;
+      const auraRadius = baseRadius * pulse;
+      
+      // 1. Majestic Luminous Light Aura (Hào quang linh diệu) using high-performance Radial Gradients
+      ctx.save();
+      const grad = ctx.createRadialGradient(dx, dy, d.rarity === 'pink' || d.rarity === 'crimson' ? 4 : 2, dx, dy, auraRadius);
+      grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+      grad.addColorStop(0.2, `${rColor}cc`);
+      grad.addColorStop(0.6, `${rColor}33`);
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(dx, dy, auraRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      
+      // 2. Slow, majestic rotating light rays / divine flares (similar to VLTK divine weapon glows)
+      // Matches serene skill effect timings, entirely separate from battle skill ring circles
+      ctx.save();
+      const slowAngle = (time * 0.0005) % (Math.PI * 2); // Majestic steady speed (approx 12s per full circle)
+      ctx.translate(dx, dy);
+      ctx.rotate(slowAngle);
+      
+      // Draw 4-point/8-point holy light star rays for premium items
+      ctx.fillStyle = rColor;
+      ctx.globalAlpha = 0.35 + Math.sin(time * 0.004) * 0.1; // Smooth breathing transparency
+      
+      // Primary horizontal/vertical slender diamonds representing beautiful light flares
+      const rayLength = auraRadius * 1.35;
+      const rayWidth = isSuperRare ? 4 : 2.5;
+      
+      ctx.beginPath();
+      // Upward Ray
+      ctx.moveTo(0, -rayLength);
+      ctx.lineTo(rayWidth, 0);
+      ctx.lineTo(-rayWidth, 0);
+      // Downward Ray
+      ctx.moveTo(0, rayLength);
+      ctx.lineTo(rayWidth, 0);
+      ctx.lineTo(-rayWidth, 0);
+      // Rightward Ray
+      ctx.moveTo(rayLength, 0);
+      ctx.lineTo(0, rayWidth);
+      ctx.lineTo(0, -rayWidth);
+      // Leftward Ray
+      ctx.moveTo(-rayLength, 0);
+      ctx.lineTo(0, rayWidth);
+      ctx.lineTo(0, -rayWidth);
+      ctx.fill();
+      
+      // Secondary diagonal cross for super rare treasures (Gold, Red, Pink)
+      if (isSuperRare) {
+        ctx.rotate(Math.PI / 4);
+        const subLength = rayLength * 0.7;
+        ctx.beginPath();
+        ctx.moveTo(0, -subLength);
+        ctx.lineTo(rayWidth * 0.7, 0);
+        ctx.lineTo(-rayWidth * 0.7, 0);
+        ctx.moveTo(0, subLength);
+        ctx.lineTo(rayWidth * 0.7, 0);
+        ctx.lineTo(-rayWidth * 0.7, 0);
+        ctx.moveTo(subLength, 0);
+        ctx.lineTo(0, rayWidth * 0.7);
+        ctx.lineTo(0, -rayWidth * 0.7);
+        ctx.moveTo(-subLength, 0);
+        ctx.lineTo(0, rayWidth * 0.7);
+        ctx.lineTo(0, -rayWidth * 0.7);
+        ctx.fill();
+      }
+      
+      ctx.restore();
+      
+      // 4. Center item chest shadow
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.beginPath();
+      ctx.ellipse(dx, dy + 10, 10, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      
+      // 5. Draw the item box itself
+      ctx.save();
+      ctx.fillStyle = rColor;
       ctx.beginPath();
       ctx.arc(dx, dy, 12, 0, Math.PI * 2);
       ctx.fill();
+      
       ctx.fillStyle = "#000";
       ctx.font = "14px Arial";
       ctx.textAlign = "center";
-      ctx.fillText("📦", dx, dy + 5);
+      ctx.fillText("📦", dx, dy + 4);
+      ctx.restore();
+      
+      // 6. Draw floating item name metadata panel above the box
+      ctx.save();
+      ctx.font = "bold 9px Arial";
+      
+      const hanBadges = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+      const curBadge = hanBadges[d.tier || 1] || '一';
+      const badgeText = `${d.name} (Đảng ${curBadge})`;
+      const textWidth = ctx.measureText(badgeText).width;
+      
+      ctx.fillStyle = "rgba(10, 10, 15, 0.85)";
+      ctx.strokeStyle = rColor;
+      ctx.lineWidth = 1;
+      
+      // Crisp retro board label
+      const bx = dx - textWidth / 2 - 6;
+      const by = dy - 28;
+      const bw = textWidth + 12;
+      const bh = 14;
+      
+      ctx.beginPath();
+      ctx.rect(bx, by, bw, bh);
+      ctx.fill();
+      ctx.stroke();
+      
+      // Write formatted title text
+      ctx.fillStyle = rColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(badgeText, dx, dy - 20);
+      ctx.restore();
     });
 
     // Entities
@@ -1210,6 +2292,16 @@ export default function GameCanvas({
       ctx.fillStyle = e.isBoss ? "#f1c40f" : "#e74c3c";
       ctx.fillRect(ex - 20, ey - e.size - 15, 40 * Math.max(0, Math.min(1, e.hp / e.maxHp)), 5);
 
+      // Draw element indicator next to HP Bar
+      if (e.element) {
+        const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
+        const elEmoji = { Metal: '⚡', Wood: '🍃', Water: '💧', Fire: '🔥', Earth: '⛰️' };
+        ctx.fillStyle = elColor[e.element] || '#fff';
+        ctx.font = 'bold 9px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(elEmoji[e.element], ex - 24, ey - e.size - 10);
+      }
+
       // Target ring
       if (p.target?.id === e.id) {
         ctx.strokeStyle = "#e74c3c";
@@ -1237,9 +2329,24 @@ export default function GameCanvas({
         ctx.stroke();
 
         ctx.translate(px, py + p.radius);
-        ctx.rotate((time * 0.002) % (Math.PI * 2));
-        ctx.strokeStyle = "rgba(243, 156, 18, 0.15)";
-        ctx.strokeRect(-160, -64, 323, 128);
+        ctx.strokeStyle = "rgba(243, 156, 18, 0.35)";
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 160, 64, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Draw multiple rotating glowing fire dots/particles around the concentric ellipse track
+        const particleCount = 8;
+        for (let i = 0; i < particleCount; i++) {
+          const angle = (time * 0.0018 + (i * Math.PI * 2) / particleCount) % (Math.PI * 2);
+          const rx = Math.cos(angle) * 160;
+          const ry = Math.sin(angle) * 64;
+          
+          ctx.fillStyle = i % 2 === 0 ? "#ff8c00" : "#ffed4a";
+          ctx.beginPath();
+          ctx.arc(rx, ry, 5 + Math.sin(time * 0.006 + i) * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
 
         // Banner text flag floating tag
@@ -1257,7 +2364,41 @@ export default function GameCanvas({
       ctx.ellipse(px, py + p.radius, 25, 10, 0, 0, Math.PI * 2);
       ctx.stroke();
       drawHuman(ctx, px, py, 18, p.color, p.facing, false, p.moving, time, p.equipment.cloak !== null);
+
+      // Render Flying/Orbiting Companion Animal Mascot (Beast Companion)
+      const comp = stateRef.current.companion;
+      if (comp) {
+        const orbitRadius = 45;
+        const speedMult = 0.003;
+        const angle = time * speedMult;
+        const petX = px + Math.cos(angle) * orbitRadius;
+        const petY = py + Math.sin(angle) * orbitRadius - 10;
+        
+        // Draw a tiny shadow under the mascot
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        ctx.ellipse(petX, petY + 14, 12, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw mascot emoji!
+        ctx.save();
+        ctx.font = "18px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(comp.emoji || "🐯", petX, petY);
+        
+        // Render companion level above
+        ctx.font = "bold 9px font-sans";
+        ctx.fillStyle = "#f39c12";
+        ctx.fillText(`Lg. ${comp.level || 1}`, petX, petY - 14);
+        ctx.restore();
+      }
     }
+
+    // Cocos Engine Render Pass
+    ctx.save();
+    ctx.translate(-cx, -cy);
+    cocosSceneRef.current.render(ctx);
+    ctx.restore();
 
     // Floating Texts
     ctx.font = "bold 16px font-serif";
@@ -1361,7 +2502,7 @@ export default function GameCanvas({
     const canvas = canvasRef.current;
     if (!canvas || stateRef.current.player.dead) return;
     const rect = canvas.getBoundingClientRect();
-    const zoom = canvas.width < 768 ? 0.72 : 0.84;
+    const zoom = canvas.width < 768 ? 0.82 : 0.94;
     const mx = (e.clientX - rect.left) / zoom + cameraRef.current.x;
     const my = (e.clientY - rect.top) / zoom + cameraRef.current.y;
 
@@ -1389,13 +2530,11 @@ export default function GameCanvas({
       if (hit) {
         return {
           ...prev,
-          auto: false,
           player: { ...prev.player, target: hit, moving: true },
         };
       } else {
         return {
           ...prev,
-          auto: false,
           player: {
             ...prev.player,
             targetX: mx,

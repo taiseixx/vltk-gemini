@@ -3,6 +3,7 @@ import { GameState } from '../types';
 import { motion } from 'motion/react';
 import { ShoppingBag, Sparkles, TrendingUp, Zap, Skull, Coins, Gift, Heart } from 'lucide-react';
 import { MAP_SIZE } from '../constants';
+import { getItemCostMultiplier, formatGoldValue } from '../utils/economy';
 
 interface Props {
   gameState: GameState;
@@ -20,6 +21,10 @@ interface RogueliteOption {
 export default function StageClearOverlay({ gameState, setGameState, addNotification }: Props) {
   const [options, setOptions] = useState<RogueliteOption[]>([]);
   const [timeLeft, setTimeLeft] = useState(10);
+
+  const priceMultiplier = getItemCostMultiplier(gameState.stage);
+  const costLife = Math.floor(500 * priceMultiplier);
+  const costGachaWeapon = Math.floor(300 * priceMultiplier);
 
   useEffect(() => {
     const pool: RogueliteOption[] = [
@@ -101,23 +106,21 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
     if (options.length === 0) return;
     
     const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          // Automatically pick the first option if time runs out
-          pickOption(options[0]);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setTimeLeft(prev => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
   }, [options]);
 
+  useEffect(() => {
+    if (timeLeft <= 0 && options.length > 0) {
+      pickOption(options[0]);
+    }
+  }, [timeLeft, options]);
+
   const buyLife = () => {
-    if (gameState.gold >= 500) {
-      setGameState(prev => prev ? { ...prev, gold: prev.gold - 500, lives: prev.lives + 1 } : null);
+    if (gameState.gold >= costLife) {
+      setGameState(prev => prev ? { ...prev, gold: prev.gold - costLife, lives: prev.lives + 1 } : null);
       addNotification('Mua thành công 1 Mạng!', '#e74c3c');
     } else {
       addNotification('Không đủ Vàng!', '#888');
@@ -125,8 +128,8 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
   };
 
   const gachaWeapon = () => {
-    if (gameState.gold >= 300) {
-      setGameState(prev => prev ? { ...prev, gold: prev.gold - 300 } : null);
+    if (gameState.gold >= costGachaWeapon) {
+      setGameState(prev => prev ? { ...prev, gold: prev.gold - costGachaWeapon } : null);
       addNotification('Gacha thành công! Hãy tìm đồ ở ải sau.', '#9b59b6');
     } else {
       addNotification('Không đủ Vàng!', '#888');
@@ -217,25 +220,31 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
       </div>
 
       <div className="w-full max-w-2xl pt-6 md:pt-8 border-t border-white/5 flex flex-col items-center">
-        <h3 className="text-gray-500 text-[10px] uppercase tracking-[0.3em] mb-4 md:mb-6 font-bold flex items-center gap-2">
+        <h3 className="text-gray-500 text-[10px] uppercase tracking-[0.3em] mb-2 font-bold flex items-center justify-center gap-2 flex-wrap">
           <ShoppingBag className="w-4 h-4" />
           Thương Nhân Vong Xuyên (Vàng: {gameState.gold.toLocaleString()})
         </h3>
         
-        <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
+        {priceMultiplier > 1 && (
+          <p className="text-red-400 font-serif italic text-[11px] mb-4 text-center">
+            ⚠️ Khan hiếm thời chiến (Ải {gameState.stage}): Giá cả tăng gấp <span className="text-white font-bold">x{priceMultiplier}</span> lần!
+          </p>
+        )}
+        
+        <div className="flex flex-col sm:flex-row gap-3 md:gap-4 transition-all w-full justify-center">
           <button 
             onClick={buyLife}
-            className="group px-8 py-3.5 border border-red-900/50 hover:border-red-500 text-red-500 hover:text-white hover:bg-red-900/20 rounded font-serif text-lg transition-all flex items-center gap-3 active:scale-95"
+            className="group px-8 py-3.5 border border-red-900/50 hover:border-red-500 text-red-500 hover:text-white hover:bg-red-900/20 rounded font-serif text-lg transition-all flex items-center justify-center gap-3 active:scale-95 cursor-pointer max-sm:w-full"
           >
             <Heart className="w-5 h-5 group-hover:fill-current" />
-            Mua ❤️ Mạng (500)
+            Mua ❤️ Mạng ({formatGoldValue(costLife)})
           </button>
           <button 
             onClick={gachaWeapon}
-            className="group px-8 py-3.5 border border-purple-900/50 hover:border-purple-500 text-purple-500 hover:text-white hover:bg-purple-900/20 rounded font-serif text-lg transition-all flex items-center gap-3 active:scale-95"
+            className="group px-8 py-3.5 border border-purple-900/50 hover:border-purple-500 text-purple-500 hover:text-white hover:bg-purple-900/20 rounded font-serif text-lg transition-all flex items-center justify-center gap-3 active:scale-95 cursor-pointer max-sm:w-full"
           >
             <Gift className="w-5 h-5 group-hover:rotate-12" />
-            Gacha Vũ Khí (300)
+            Gacha Vũ Khí ({formatGoldValue(costGachaWeapon)})
           </button>
         </div>
       </div>

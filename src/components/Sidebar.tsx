@@ -2,12 +2,28 @@ import { useState } from 'react';
 import { GameState, Equipment, Rarity } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { RARITY_COLORS, SECTS } from '../constants';
+// @ts-ignore
+import equipmentBg from '../assets/images/equipment_bg_1779367218827.png';
+// @ts-ignore
+import volamWeaponsImg from '../assets/images/volam_sect_weapons_1779556373416.png';
+// @ts-ignore
+import volamArmorImg from '../assets/images/volam_sect_armor_1779556389670.png';
 
 interface Props {
   gameState: GameState;
   onAvatarClick: () => void;
   onTargetTextClick: () => void;
 }
+
+const formatGold = (value: number): string => {
+  if (value >= 100000000) {
+    return Math.floor(value / 1000000).toLocaleString('en-US') + 'M';
+  }
+  if (value >= 1000000) {
+    return Math.floor(value / 1000).toLocaleString('en-US') + 'K';
+  }
+  return value.toLocaleString('en-US');
+};
 
 export default function Sidebar({ gameState, onAvatarClick }: Props) {
   const p = gameState.player;
@@ -16,6 +32,7 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
 
   const [selectedGear, setSelectedGear] = useState<{ type: string; item: Equipment | null; emoji: string; slotKey: string } | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showEquipment, setShowEquipment] = useState(true);
 
   const handleSlotClick = (type: string, item: Equipment | null, emoji: string, slotKey: string) => {
     if (selectedGear && selectedGear.slotKey === slotKey) {
@@ -23,6 +40,27 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
     } else {
       setSelectedGear({ type, item, emoji, slotKey });
     }
+  };
+
+  const getTierBadge = (tier?: number): string => {
+    const badges = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    return badges[tier || 1] || '一';
+  };
+
+  const getTierName = (tier?: number): string => {
+    const names = [
+      '',
+      'Nhất Đẳng (一)',
+      'Nhị Đẳng (二)',
+      'Tam Đẳng (三)',
+      'Tứ Đẳng (四)',
+      'Ngũ Đẳng (五)',
+      'Lục Đẳng (六)',
+      'Thất Đẳng (七)',
+      'Bát Đẳng (八)',
+      'Cửu Đẳng (九)'
+    ];
+    return names[tier || 1] || 'Nhất Đẳng (一)';
   };
 
   const getRarityName = (rarity: Rarity): string => {
@@ -44,24 +82,55 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
     const isSelected = selectedGear?.slotKey === slotKey;
 
     return (
-      <div 
+      <button 
+        type="button"
         onClick={() => handleSlotClick(type, item, emoji, slotKey)}
-        className={`flex flex-col items-center group cursor-pointer pointer-events-auto transition-all ${isSelected ? 'scale-110 mb-1' : 'hover:scale-105'}`}
+        className={`flex flex-col items-center group cursor-pointer pointer-events-auto p-1.5 rounded-lg border transition-all duration-200 focus:outline-none
+          ${isSelected 
+            ? 'bg-gold/15 border-gold/50 shadow-inner scale-105' 
+            : 'bg-white/[0.01] border-transparent hover:bg-white/[0.05] hover:border-white/10 hover:scale-105 active:scale-95'}`}
       >
-        <div className={`w-11 h-11 md:w-13 md:h-13 bg-gray-900 rounded-lg flex flex-col items-center justify-center relative transition-all border ${isSelected ? 'border-gold shadow-[0_0_15px_rgba(212,175,55,0.6)]' : 'border-gray-800 hover:border-gray-600'}`}>
+        <div className={`w-11 h-11 md:w-13 md:h-13 bg-gray-950 rounded-lg flex flex-col items-center justify-center relative transition-all border ${isSelected ? 'border-gold shadow-[0_0_15px_rgba(212,175,55,0.6)]' : 'border-gray-850 hover:border-gray-600'}`}>
           {item ? (
             <>
-              <div className="absolute inset-[-2px] rounded-[inherit] overflow-hidden opacity-80 group-hover:opacity-100 transition-opacity z-0 pointer-events-none">
-                <div className="absolute inset-[-50%] w-[200%] h-[200%] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin-normal"
-                     style={{ background: `conic-gradient(from 0deg, transparent 0%, ${rarityColor} 40%, white 48%, transparent 50%, transparent 50%, ${rarityColor} 90%, white 98%, transparent 100%)` }} />
+              {/* Majestic Luminous Divine Aura (Hào Quang Luminous Thánh Thể) - High Performance & Extremely Clear */}
+              <div className="absolute inset-[-4px] rounded-lg overflow-visible pointer-events-none z-20">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <radialGradient id={`slotLuminous-${slotKey}`} cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                      <stop offset="30%" stopColor={rarityColor} stopOpacity="0.85" />
+                      <stop offset="70%" stopColor={rarityColor} stopOpacity="0.2" />
+                      <stop offset="100%" stopColor={rarityColor} stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
+                  
+                  {/* Soft white core diffusing into a misty color haze */}
+                  <circle cx="50" cy="50" r="44" fill={`url(#slotLuminous-${slotKey})`} className="animate-pulse origin-center" />
+                  
+                  {/* Majestic 4-point/8-point Star Light Rays spinning serenely slowly (equal to skill tempo) */}
+                  <g className="origin-center animate-[spin_18s_linear_infinite]">
+                    {/* Primary vertical and horizontal slender diamonds */}
+                    <path d="M50 8 L52.5 50 L50 92 L47.5 50 Z" fill={rarityColor} fillOpacity="0.5" />
+                    <path d="M8 50 L50 52.5 L92 50 L50 47.5 Z" fill={rarityColor} fillOpacity="0.5" />
+                    
+                    {/* Secondary diagonal diamonds for legendary/premium gear classes to establish grandeur */}
+                    {(item.rarity === 'pink' || item.rarity === 'crimson' || item.rarity === 'gold_rarity') && (
+                      <g transform="rotate(45 50 50)">
+                        <path d="M50 16 L52 50 L50 84 L48 50 Z" fill={rarityColor} fillOpacity="0.4" />
+                        <path d="M16 50 L50 52 L84 50 L50 48 Z" fill={rarityColor} fillOpacity="0.4" />
+                      </g>
+                    )}
+                  </g>
+                </svg>
               </div>
-              <div className="absolute inset-[2px] rounded bg-gray-900 z-10 pointer-events-none"
+              <div className="absolute inset-[2.5px] rounded bg-gray-900 z-10 pointer-events-none"
                    style={{ boxShadow: `inset 0 0 10px ${rarityColor}40` }} />
               
               {/* Tier Level Display Badge */}
-              <div className="absolute top-0 right-1 text-[8.5px] md:text-[10px] font-black font-serif z-30 select-none scale-90"
+              <div className="absolute top-0.5 right-1.5 text-[8.5px] md:text-[10px] font-black font-serif z-30 select-none scale-90"
                    style={{ color: rarityColor, textShadow: `0 0 4px ${rarityColor}` }}>
-                {item.tier === 3 ? '三' : item.tier === 2 ? '二' : '一'}
+                {getTierBadge(item.tier)}
               </div>
             </>
           ) : (
@@ -71,34 +140,15 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
             {emoji}
           </span>
         </div>
-        <span className="text-[7.5px] md:text-[9px] text-gray-500 mt-0.5 uppercase tracking-wider font-bold group-hover:text-gold transition-colors z-20 truncate w-12 text-center">
+        <span className="text-[7.5px] md:text-[9px] text-gray-400 mt-1 uppercase tracking-wider font-bold group-hover:text-gold transition-colors z-20 truncate w-12 text-center">
           {type}
         </span>
-      </div>
+      </button>
     );
   };
 
   return (
     <>
-      {/* Target Info */}
-      <aside className="fixed top-24 md:top-28 left-4 w-auto flex flex-col items-start z-40 pointer-events-none gap-4">
-        <div className="bg-red-950/40 backdrop-blur border border-red-900/50 rounded-lg p-3 text-center min-w-[124px] pointer-events-auto shadow-lg shadow-black/50">
-          <p className="text-[8px] md:text-[10px] text-red-500 font-bold mb-1 uppercase tracking-widest text-left">Mục Tiêu</p>
-          <div className="text-xs md:text-sm font-serif font-bold text-red-400 text-left">
-            {p.target ? (
-              <p className="truncate drop-shadow-sm">{p.target.isBoss ? '👑 ' : p.target.isSubBoss ? '⚡ ' : ''}{p.target.name || 'Quái Vật'}</p>
-            ) : (
-              <p className="text-gray-600 italic text-[10px] md:text-xs">Phạm vi vắng lặng...</p>
-            )}
-          </div>
-          {p.target && (
-             <div className="w-full h-1 bg-red-950 rounded-full mt-2 overflow-hidden">
-               <div className="h-full bg-red-500 transition-all" style={{ width: `${(p.target.hp / p.target.maxHp) * 100}%` }} />
-             </div>
-          )}
-        </div>
-      </aside>
-
       {/* Sect Avatar / Character Info & Help ? Button */}
       <aside className="fixed bottom-24 md:bottom-[7.5rem] left-4 z-40 pointer-events-auto flex items-center gap-2">
         <div className="bg-black/90 backdrop-blur-md border border-gray-800 hover:border-gold/50 rounded-lg p-2 md:p-3 flex items-center gap-3 shadow-[0_0_20px_rgba(0,0,0,0.8)] transition-all hover:scale-105 cursor-pointer" onClick={onAvatarClick}>
@@ -120,7 +170,7 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
         {/* Game Info ? Button */}
         <button 
           onClick={() => setShowHelp(true)}
-          className="w-10 h-10 md:w-12 md:h-12 border border-gray-800 hover:border-gold/70 bg-black text-gold hover:text-white rounded-lg flex items-center justify-center text-xl font-bold cursor-pointer transition-all shadow-md active:scale-95"
+          className="w-10 h-10 md:w-12 md:h-12 border border-gray-800 hover:border-gold/70 bg-black text-gold hover:text-white rounded-lg flex items-center justify-center text-xl font-bold cursor-pointer transition-all shadow-md active:scale-95 select-none"
           title="Thông Tin Cơ Chế & Chỉ Số"
         >
           ❔
@@ -128,24 +178,70 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
       </aside>
 
       {/* Equipment Display Right */}
-      <aside className="fixed top-24 md:top-28 right-4 w-auto flex flex-col items-end z-40 pointer-events-none gap-4">
-        <div className="bg-black/85 backdrop-blur-md border border-white/10 rounded-lg p-3 flex flex-col items-center shadow-lg pointer-events-auto min-w-[130px] md:min-w-[150px]">
-          <p className="text-[9px] md:text-[11px] text-gray-400 font-bold mb-2 uppercase tracking-[0.2em] font-serif border-b border-white/5 pb-1 w-full text-center">Trang Bị</p>
-          <div className="grid grid-cols-2 gap-x-2.5 gap-y-2">
-            <Slot type="Vũ khí" item={eq.weapon} emoji="🗡️" slotKey="weapon" />
-            <Slot type="Giáp" item={eq.armor} emoji="🛡️" slotKey="armor" />
-            <Slot type="Trang sức" item={eq.accessory} emoji="💍" slotKey="accessory" />
-            <Slot type="Bảo vật" item={eq.special} emoji="🔮" slotKey="special" />
-            <Slot type="Tọa kỵ" item={eq.horse} emoji="🐴" slotKey="horse" />
-            <Slot type="Phi phong" item={eq.cloak} emoji="🧥" slotKey="cloak" />
-            <Slot type="Mật ấn" item={eq.seal} emoji="🔏" slotKey="seal" />
-            <Slot type="Cờ lệnh" item={eq.banner} emoji="🚩" slotKey="banner" />
+      <aside className="fixed top-24 md:top-28 right-4 w-auto flex flex-col items-end z-[100] pointer-events-none gap-2">
+        {/* Compact stats: Gold and Lives above the button */}
+        <div className="flex items-center gap-2.5 bg-black/90 backdrop-blur-md px-3 py-1.5 rounded-lg border border-gold/30 shadow-[0_0_15px_rgba(212,175,55,0.15)] pointer-events-auto select-none scale-95 sm:scale-100 origin-right">
+          <div className="flex items-center gap-1">
+            <span className="text-yellow-500 text-xs text-shadow">💰</span>
+            <span className="text-gold font-serif font-black text-xs sm:text-sm tracking-wide">
+              {formatGold(gameState.gold)}
+            </span>
+          </div>
+          <div className="w-[1px] h-3 bg-white/10" />
+          <div className="flex items-center gap-1">
+            <span className="text-red-500 text-xs text-shadow animate-pulse">❤️</span>
+            <span className="text-red-400 font-serif font-black text-xs sm:text-sm">
+              x{gameState.lives}
+            </span>
           </div>
         </div>
 
+        <button 
+          onClick={() => setShowEquipment(!showEquipment)}
+          className="pointer-events-auto border border-white/10 hover:border-gold bg-black/90 hover:bg-[#121216] text-[8px] md:text-[10px] text-gold hover:text-white font-sans font-black px-2 py-1.5 rounded shadow-md z-[110] active:scale-95 transition-all flex items-center gap-1"
+        >
+          {showEquipment ? "👁️ Ẩn Trang Bị" : "🎒 Hiện Trang Bị"}
+        </button>
+        
+        <AnimatePresence>
+          {showEquipment && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, x: 20 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.95, x: 20 }}
+              className="relative p-3.5 flex flex-col items-center rounded-xl border border-white/15 pointer-events-auto min-w-[145px] md:min-w-[165px] select-none"
+              style={{
+                backgroundColor: 'rgba(23, 10, 12, 0.40)', // Liquid glass with 40% opacity
+                backgroundImage: `
+                  radial-gradient(circle at center, rgba(30, 5, 8, 0.45) 0%, rgba(5, 1, 2, 0.9) 100%),
+                  url(${equipmentBg})
+                `,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundBlendMode: 'overlay',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.15)',
+              }}
+            >
+              <p className="text-[9px] md:text-[11px] text-gray-350 font-bold mb-2 uppercase tracking-[0.2em] font-serif border-b border-white/10 pb-1 w-full text-center" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Trang Bị</p>
+              <div className="grid grid-cols-2 gap-x-2.5 gap-y-2">
+                <Slot type="Vũ khí" item={eq.weapon} emoji="🗡️" slotKey="weapon" />
+                <Slot type="Giáp" item={eq.armor} emoji="🛡️" slotKey="armor" />
+                <Slot type="Trang sức" item={eq.accessory} emoji="💍" slotKey="accessory" />
+                <Slot type="Bảo vật" item={eq.special} emoji="🔮" slotKey="special" />
+                <Slot type="Tọa kỵ" item={eq.horse} emoji="🐴" slotKey="horse" />
+                <Slot type="Phi phong" item={eq.cloak} emoji="🧥" slotKey="cloak" />
+                <Slot type="Mật ấn" item={eq.seal} emoji="🈶" slotKey="seal" />
+                <Slot type="Cờ lệnh" item={eq.banner} emoji="🚩" slotKey="banner" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Dynamic Equipment Description Card Panel */}
         <AnimatePresence>
-          {selectedSelectedDescCard(selectedGear)}
+          {showEquipment && selectedSelectedDescCard(selectedGear)}
         </AnimatePresence>
       </aside>
 
@@ -221,7 +317,7 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
                   </div>
 
                   <div className="flex items-start gap-3 bg-white/5 p-2 rounded">
-                    <span className="text-xl">🪽</span>
+                    <span className="text-xl">🧥</span>
                     <div>
                       <p className="text-gold font-bold">Phi Phong (Cloak) &rarr; 💥 Sát Sương Chí Mạng</p>
                       <p className="text-xs text-gray-400">Kích hoạt thần trang cho phép thi triển đòn đánh bạo phát sát thương cực đại.</p>
@@ -261,31 +357,64 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
 
     const { type, item, emoji, slotKey } = selected;
     const rarityColor = item ? RARITY_COLORS[item.rarity as keyof typeof RARITY_COLORS] : undefined;
+    const itemVisual = slotKey === 'weapon' ? volamWeaponsImg : slotKey === 'armor' ? volamArmorImg : equipmentBg;
 
     return (
       <motion.div 
-        initial={{ opacity: 0, x: 50, scale: 0.95 }}
+        initial={{ opacity: 0, x: -20, scale: 0.95 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
-        exit={{ opacity: 0, x: 50, scale: 0.95 }}
-        className="w-64 bg-[#0a0a0f]/95 backdrop-blur-md border border-gray-800 rounded-lg p-4 shadow-xl pointer-events-auto flex flex-col items-stretch text-left font-serif z-50 text-xs text-gray-300"
+        exit={{ opacity: 0, x: -20, scale: 0.95 }}
+        className="fixed top-24 sm:top-28 left-4 right-4 sm:right-auto w-auto sm:w-[285px] rounded-xl p-4 border border-white/15 shadow-[0_12px_42px_rgba(0,0,0,0.95)] pointer-events-auto flex flex-col items-stretch text-left font-serif z-50 text-xs text-gray-300 max-h-[42vh] sm:max-h-none overflow-y-auto"
+        style={{
+          backgroundColor: 'rgba(23, 10, 12, 0.40)', // Liquid glass styled at 40% opacity
+          backgroundImage: `
+            radial-gradient(circle at center, rgba(30, 5, 8, 0.45) 0%, rgba(5, 1, 2, 0.92) 100%),
+            url(${itemVisual})
+          `,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundBlendMode: 'overlay',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.15)',
+        }}
       >
         <div className="flex justify-between items-start border-b border-white/5 pb-2 mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-lg">{emoji}</span>
+            <span className="text-xl p-1 bg-white/[0.03] rounded border border-white/5">{emoji}</span>
             <div>
-              <p className="font-bold text-sm" style={{ color: rarityColor || '#888' }}>
+              <p className="font-bold text-sm tracking-wide" style={{ color: rarityColor || '#888', textShadow: rarityColor ? `0 0 5px ${rarityColor}40` : '' }}>
                 {item ? item.name : 'Vô Danh Pháp Bảo'}
               </p>
-              <p className="text-[9px] text-gray-500 uppercase tracking-wider">{type}</p>
+              <p className="text-[9px] text-yellow-400 font-sans uppercase font-black tracking-widest">{type}</p>
             </div>
           </div>
           <button 
             onClick={() => setSelectedGear(null)}
-            className="text-gray-500 hover:text-white text-base font-bold cursor-pointer"
+            className="text-gray-500 hover:text-white text-lg font-bold cursor-pointer transition-colors p-1"
           >
             &times;
           </button>
         </div>
+
+        {item && (
+          <div className="relative w-full h-24 rounded-lg overflow-hidden border border-amber-500/20 mb-2 bg-[#09090e] shadow-inner group">
+            <img 
+              src={itemVisual} 
+              className="w-full h-full object-cover object-center scale-102 group-hover:scale-108 transition-transform duration-500" 
+              alt={item.name} 
+              referrerPolicy="no-referrer"
+            />
+            {/* Elegant corner lighting */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0e0c12]/90 via-[#0e0c12]/10 to-[#0e0c12]/50 pointer-events-none" />
+            <div className="absolute inset-[-3px] border rounded-lg pointer-events-none transition-colors duration-300" style={{ borderColor: `${rarityColor}50` }} />
+            <div className="absolute bottom-1.5 left-2 flex items-center gap-1 z-10">
+              <span className="text-[8.5px] uppercase font-bold tracking-wider font-sans bg-black/60 border rounded px-1.5 py-0.5" style={{ color: rarityColor, borderColor: `${rarityColor}40` }}>
+                {getRarityName(item.rarity).split(' (')[0]}
+              </span>
+            </div>
+          </div>
+        )}
 
         {item ? (
           <div className="space-y-2">
@@ -293,7 +422,7 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
               Phẩm Cấp: <span style={{ color: rarityColor }}>{getRarityName(item.rarity)}</span>
             </p>
             <p className="text-[10px] text-gray-450 uppercase tracking-widest font-bold font-sans">
-              Thời Đại / Cấp Độ: <span className="text-amber-400 font-bold font-serif">{item.tier === 3 ? 'Tam Đại Di Ma (三)' : item.tier === 2 ? 'Nhị Đại Thần Linh (二)' : 'Nhất Đại Phàm Nhân (一)'}</span>
+              Thời Đại / Cấp Độ: <span className="text-amber-400 font-bold font-serif">{getTierName(item.tier)}</span>
             </p>
             <p className="text-[10px] text-gray-450 uppercase tracking-widest font-bold font-sans">
               Trị Số Uy Lực: <span className="text-gold font-serif text-xs">{item.power.toFixed(1)}</span>
@@ -317,7 +446,7 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
                 <p>🐎 Tăng Tốc Độ Chạy bản đồ: <span className="text-green-500 font-bold font-sans">+{(item.power * 4).toFixed(0)} px/s</span> và giảm CD tuyệt học <span className="text-green-500 font-bold font-sans">+{(item.power * 1).toFixed(0)}%</span>.</p>
               )}
               {slotKey === 'cloak' && (
-                <p>🪽 Tăng Thêm Sát Thương Chí Mạng: <span className="text-green-500 font-bold font-sans">+{(item.power * 3).toFixed(0)}%</span> và kích hoạt Đôi Cánh Hào Quang rực rỡ sau lưng.</p>
+                <p>🧥 Tăng Thêm Sát Thương Chí Mạng: <span className="text-green-500 font-bold font-sans">+{(item.power * 3).toFixed(0)}%</span> và kích hoạt Đôi Cánh Hào Quang rực rỡ sau lưng.</p>
               )}
               {slotKey === 'seal' && (
                 <p>🈶 Tăng Diện Tích Vụ Nổ chưởng lực: <span className="text-green-500 font-bold font-sans">+{(item.power * 2.5).toFixed(0)} px</span>.</p>

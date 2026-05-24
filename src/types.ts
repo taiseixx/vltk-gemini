@@ -37,6 +37,23 @@ export interface Equipment {
   power: number;
   name: string;
   tier?: number;
+  upgradeLvl?: number;
+}
+
+export interface Companion {
+  name: string;
+  type: string;
+  emoji: string;
+  level: number;
+  exp: number;
+  hp: number;
+  maxHp: number;
+  atk: number;
+  unlocked: boolean;
+  equipment: {
+    weapon: Equipment | null;
+    armor: Equipment | null;
+  };
 }
 
 export interface Entity {
@@ -53,6 +70,7 @@ export interface Entity {
   isBoss: boolean;
   name?: string;
   isSubBoss?: boolean;
+  element?: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth';
 }
 
 export interface Particle {
@@ -120,12 +138,20 @@ export interface GameState {
     mp: number;
     maxMp: number;
     atk: number;
+    rage: number;
+    maxRage: number;
+    rageActive?: boolean;
+    rageTimer?: number;
     target: Entity | null;
     moving: boolean;
     atkCd: number;
     dead: boolean;
     color: string;
     icon: string;
+    sectId?: string;
+    skillComboHistory?: number[]; 
+    comboTimer?: number;
+    activeCombo?: { name: string; multiplier: number; timer: number; color: string } | null;
     equipment: {
       weapon: Equipment | null;
       armor: Equipment | null;
@@ -153,4 +179,6 @@ export interface GameState {
   skills: Skill[];
   entities: Entity[];
   drops: Drop[];
+  livesPurchased: number;
+  companion?: Companion;
 }

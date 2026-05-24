@@ -3,6 +3,13 @@ import { GameState, Rarity, EquipmentType, Equipment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, X, Heart, Sword, Shield, Gem, Star, Package, Award, Zap, Sparkles, Trash2, ShieldCheck, Trophy } from 'lucide-react';
 import { RARITIES, RARITY_COLORS, EQUIPMENT_NAME_MAP } from '../constants';
+import { getItemCostMultiplier, formatGoldValue } from '../utils/economy';
+// @ts-ignore
+import equipmentBg from '../assets/images/equipment_bg_1779367218827.png';
+// @ts-ignore
+import volamWeaponsImg from '../assets/images/volam_sect_weapons_1779556373416.png';
+// @ts-ignore
+import volamArmorImg from '../assets/images/volam_sect_armor_1779556389670.png';
 
 interface Props {
   gameState: GameState;
@@ -13,9 +20,12 @@ interface Props {
 export default function ShopOverlay({ gameState, setGameState, onClose }: Props) {
   const [gachaResult, setGachaResult] = useState<Equipment[] | null>(null);
 
+  const priceMultiplier = getItemCostMultiplier(gameState.stage);
+  const costLife = Math.floor(500 * priceMultiplier);
+
   const buyLife = () => {
-    if (gameState.gold >= 500) {
-      setGameState(prev => prev ? { ...prev, gold: prev.gold - 500, lives: prev.lives + 1 } : null);
+    if (gameState.gold >= costLife) {
+      setGameState(prev => prev ? { ...prev, gold: prev.gold - costLife, lives: prev.lives + 1 } : null);
     }
   };
 
@@ -23,6 +33,28 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
     if (gameState.gold >= price) {
        applyEquipments([item], price);
     }
+  };
+
+  const getTierBadge = (tier?: number): string => {
+    const badges = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    return badges[tier || 1] || '一';
+  };
+
+  const getTierTitleName = (tier?: number): string => {
+    const level = tier || 1;
+    const names = [
+      '',
+      'Đệ Nhất Đẳng (Sơ Nhập Võ Lâm)',
+      'Đệ Nhị Đẳng (Tập Sự Hành Tẩu)',
+      'Đệ Tam Đẳng (Lục Lâm Thành Danh)',
+      'Đệ Tứ Đẳng (Danh Môn Tinh Anh)',
+      'Đệ Ngũ Đẳng (Giang Hồ Hào Kiệt)',
+      'Đệ Lục Đẳng (Nhất Phương Tôn Giả)',
+      'Đệ Thất Đẳng (Khai Sơn Tổ Sư)',
+      'Đệ Bát Đẳng (Chấn Thế Thần Binh)',
+      'Đệ Cửu Đẳng (Cổ Kim Vô Song)'
+    ];
+    return names[level] || 'Đệ Nhất Đẳng';
   };
 
   const getItemValue = (item: Equipment): number => {
@@ -36,7 +68,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
       crimson: 3200,
       pink: 6000,
     };
-    const tierMultiplier = item.tier === 3 ? 2.5 : (item.tier === 2 ? 1.5 : 1.0);
+    const tierMultiplier = 1 + ((item.tier || 1) - 1) * 0.75;
     const coreVal = (baseValue[item.rarity] || 120) * tierMultiplier;
     // Bán thu hồi bị giảm 75% giá trị, tức là đại hiệp nhận lại 25% ngân lượng
     return Math.floor(coreVal * 0.25);
@@ -75,6 +107,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
           newBuffs.skillRangeBonus = rangeBonus;
 
           const newMaxHp = Math.floor((100 + prev.player.currentStats.con * 20) * newBuffs.hpMult);
+          const newMaxMp = Math.floor((100 + prev.player.currentStats.nei * 15) * 1.0);
           const newAtk = Math.floor((10 + prev.player.currentStats.str * 3) * newBuffs.dmgMult);
 
           return {
@@ -84,6 +117,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               player: {
                   ...prev.player,
                   maxHp: newMaxHp,
+                  maxMp: newMaxMp,
                   atk: newAtk,
                   speed,
                   equipment: newEquipment
@@ -93,7 +127,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
   };
 
   const rollGacha = (times: number) => {
-     const cost = times * 200;
+     const cost = Math.floor(times * 200 * priceMultiplier);
      if (gameState.gold < cost) return;
 
      const results: Equipment[] = [];
@@ -105,27 +139,42 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
         
         // Boosted rates for x10 (at least Epic on the last roll)
         if (times === 10 && i === 9) {
-           if (rand < 0.06) rarity = 'pink';
-           else if (rand < 0.16) rarity = 'crimson';
-           else if (rand < 0.35) rarity = 'gold_rarity';
+           if (rand < 0.008) rarity = 'pink'; // 0.8%
+           else if (rand < 0.024) rarity = 'crimson'; // 1.6%
+           else if (rand < 0.065) rarity = 'gold_rarity'; // 4.1%
+           else if (rand < 0.20) rarity = 'emerald';
+           else if (rand < 0.45) rarity = 'legendary';
            else rarity = 'epic'; // Guaranteed Epic or better
         } else {
-           if (rand < 0.012) rarity = 'pink';
-           else if (rand < 0.03) rarity = 'crimson';
-           else if (rand < 0.06) rarity = 'gold_rarity';
-           else if (rand < 0.12) rarity = 'emerald';
-           else if (rand < 0.22) rarity = 'legendary';
-           else if (rand < 0.45) rarity = 'epic';
-           else if (rand < 0.75) rarity = 'rare';
+           if (rand < 0.001) rarity = 'pink'; // 0.1% class Thánh Thể
+           else if (rand < 0.004) rarity = 'crimson'; // 0.3% class Huyết Ảnh
+           else if (rand < 0.014) rarity = 'gold_rarity'; // 1.0% class Hoàng Kim
+           else if (rand < 0.045) rarity = 'emerald'; // 3.1%
+           else if (rand < 0.115) rarity = 'legendary'; // 7.0%
+           else if (rand < 0.30) rarity = 'epic'; // 18.5%
+           else if (rand < 0.65) rarity = 'rare'; // 35.0%
+           else rarity = 'common';
         }
         
-        // Randomize Level / Tier (一, 二, 三)
-        // Cấp I: 60%, Cấp II: 30%, Cấp III: 10%
+        // Unlocks larger range of tiers early-game, cap at 9 (Cửu Đẳng)
+        const maxPossibleTier = Math.min(9, Math.max(3, gameState.stage + 1));
+        
+        // Balanced, exciting, progression-tuned tier distribution!
         const randTier = Math.random();
         let tier = 1;
-        if (randTier < 0.10) tier = 3;
-        else if (randTier < 0.40) tier = 2;
-        else tier = 1;
+        if (randTier < 0.35) {
+          // 35% chance to roll current max tier
+          tier = maxPossibleTier;
+        } else if (randTier < 0.60) {
+          // 25% chance to roll max - 1
+          tier = Math.max(1, maxPossibleTier - 1);
+        } else if (randTier < 0.80) {
+          // 20% chance to roll max - 2
+          tier = Math.max(1, maxPossibleTier - 2);
+        } else {
+          // 20% chance to roll a fully random tier up to max
+          tier = Math.max(1, Math.floor(1 + Math.random() * maxPossibleTier));
+        }
 
         const type = types[Math.floor(Math.random() * types.length)];
         const powerBase: Record<Rarity, number> = { 
@@ -139,8 +188,8 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
           pink: 20 
         };
         
-        // Sức mạnh tỷ lệ với Cấp độ độ hiếm của trang bị
-        const tierMultiplier = tier === 3 ? 1.5 : (tier === 2 ? 1.25 : 1.0);
+        // Sức mạnh tỷ lệ với Cấp độ độ hiếm của trang bị (tăng sức mạnh Đẳng 1-9 vượt bực)
+        const tierMultiplier = 1 + (tier - 1) * 0.35;
         const power = Math.floor((powerBase[rarity] + Math.floor(Math.random() * (powerBase[rarity] + 1))) * tierMultiplier);
         const typeNames = EQUIPMENT_NAME_MAP[type];
         const name = typeNames ? (typeNames[rarity] || 'Kỳ Trân Thần Khí') : 'Kỳ Trân Thần Khí';
@@ -199,6 +248,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
       newBuffs.skillRangeBonus = rangeBonus;
 
       const newMaxHp = Math.floor((100 + prev.player.currentStats.con * 20) * newBuffs.hpMult);
+      const newMaxMp = Math.floor((100 + prev.player.currentStats.nei * 15) * 1.0);
       const newAtk = Math.floor((10 + prev.player.currentStats.str * 3) * newBuffs.dmgMult);
 
       return {
@@ -208,6 +258,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
         player: {
           ...prev.player,
           maxHp: newMaxHp,
+          maxMp: newMaxMp,
           atk: newAtk,
           speed,
           equipment: newEquipment
@@ -278,16 +329,22 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <span className="text-gold font-serif text-2xl md:text-3xl drop-shadow-sm">{gameState.gold.toLocaleString()} Vàng</span>
            </div>
            
+           {priceMultiplier > 1 && (
+             <div className="mb-6 text-center px-4 py-2.5 border border-red-900/40 bg-red-950/20 rounded-lg text-red-400 font-serif text-xs md:text-sm italic">
+               ⚠️ <span className="font-bold uppercase tracking-wide">Chiến trường khan hiếm (Ải {gameState.stage}):</span> Do ách tắc giao thương quyết liệt, giá cả toàn bộ kỳ trân dị dược tăng <span className="font-extrabold text-white text-sm bg-red-900/50 px-2 py-0.5 rounded ml-1">x{priceMultiplier}</span> lần!
+             </div>
+           )}
+           
            <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Vật Phẩm Linh Dược</h4>
            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
               <button 
                 onClick={buyLife} 
-                disabled={gameState.gold < 500} 
-                className="p-3 md:p-4 border border-red-900/50 bg-red-950/10 hover:border-red-500 disabled:opacity-40 disabled:hover:border-red-900/50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer"
+                disabled={gameState.gold < costLife} 
+                className="p-3 md:p-4 border border-red-900/50 bg-red-950/10 hover:border-red-500 disabled:opacity-40 disabled:hover:border-red-900/50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer w-full text-center"
               >
                  <Heart className="w-6 h-6 md:w-8 md:h-8 text-red-500 group-hover:scale-110 transition-transform drop-shadow" />
                  <span className="text-red-500 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center">Hồi Sinh Đan<br/>(+1 Mạng hồi sinh)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/50">500</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/50">{formatGoldValue(costLife)}</span>
               </button>
            </div>
 
@@ -295,113 +352,113 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
            <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
               <button 
                 onClick={() => rollGacha(1)} 
-                disabled={gameState.gold < 200} 
-                className="p-4 border border-teal-900/60 bg-[#0e211e] hover:border-teal-400 disabled:opacity-40 disabled:hover:border-teal-900/60 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer"
+                disabled={gameState.gold < Math.floor(200 * priceMultiplier)} 
+                className="p-4 border border-teal-900/60 bg-[#0e211e] hover:border-teal-400 disabled:opacity-40 disabled:hover:border-teal-900/60 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer w-full text-center"
               >
                  <Package className="w-7 h-7 md:w-8 md:h-8 text-teal-400 group-hover:rotate-6 transition-transform drop-shadow" />
                  <span className="text-teal-300 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center">Tầm Bảo Đơn (x1)<br/>Toàn bộ 8 slot trang bị</span>
-                 <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/60 font-bold">200 Vàng</span>
+                 <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/60 font-bold">{formatGoldValue(Math.floor(200 * priceMultiplier))} Vàng</span>
               </button>
               <button 
                 onClick={() => rollGacha(10)} 
-                disabled={gameState.gold < 2000} 
-                className="p-4 border border-amber-950/80 bg-[#1f170c] hover:border-amber-400 disabled:opacity-40 disabled:hover:border-amber-950/80 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all relative overflow-hidden cursor-pointer"
+                disabled={gameState.gold < Math.floor(2000 * priceMultiplier)} 
+                className="p-4 border border-amber-950/80 bg-[#1f170c] hover:border-amber-400 disabled:opacity-40 disabled:hover:border-amber-950/80 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all relative overflow-hidden cursor-pointer w-full text-center"
               >
                  <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/10 to-transparent pointer-events-none" />
                  <Package className="w-7 h-7 md:w-8 md:h-8 text-amber-500 group-hover:scale-110 transition-transform drop-shadow" />
                  <span className="text-amber-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center">Thập Liên Tầm Bảo (x10)<br/>Đảm Bảo Bảo Vật Cực Phẩm!</span>
-                 <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/60 shadow-[0_0_10px_#d4af37] font-bold">2,000 Vàng</span>
+                 <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/60 shadow-[0_0_10px_#d4af37] font-bold">{formatGoldValue(Math.floor(2000 * priceMultiplier))} Vàng</span>
               </button>
            </div>
 
            <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Thần Khí Truyền Thuyết Võ Lâm</h4>
-           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 font-serif">
               {/* Weapon */}
               <button 
-                onClick={() => buyItem(2500, { name: 'Ỷ Thiên Thần Kiếm', type: 'weapon', rarity: 'pink', power: 20, tier: 1 }, 'weapon')} 
-                disabled={gameState.gold < 2500 || gameState.player.equipment.weapon?.name === 'Ỷ Thiên Thần Kiếm'} 
-                className="p-3 md:p-4 border border-purple-900/40 bg-purple-950/5 hover:border-purple-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(2500 * priceMultiplier), { name: 'Ỷ Thiên Thần Kiếm', type: 'weapon', rarity: 'pink', power: 20, tier: 1 }, 'weapon')} 
+                disabled={gameState.gold < Math.floor(2500 * priceMultiplier) || gameState.player.equipment.weapon?.name === 'Ỷ Thiên Thần Kiếm'} 
+                className="p-3 md:p-4 border border-purple-900/40 bg-purple-950/5 hover:border-purple-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Sword className="w-7 h-7 text-purple-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-purple-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Ỷ Thiên Kiếm<br/>(+50 Lực Tay dmg)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">2,500</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2500 * priceMultiplier))}</span>
               </button>
               
               {/* Armor */}
               <button 
-                onClick={() => buyItem(2000, { name: 'Hoàng Kim Chiến Giáp', type: 'armor', rarity: 'pink', power: 20, tier: 1 }, 'armor')} 
-                disabled={gameState.gold < 2000 || gameState.player.equipment.armor?.name === 'Hoàng Kim Chiến Giáp'} 
-                className="p-3 md:p-4 border border-blue-900/40 bg-blue-950/5 hover:border-blue-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(2000 * priceMultiplier), { name: 'Hoàng Kim Chiến Giáp', type: 'armor', rarity: 'pink', power: 20, tier: 1 }, 'armor')} 
+                disabled={gameState.gold < Math.floor(2000 * priceMultiplier) || gameState.player.equipment.armor?.name === 'Hoàng Kim Chiến Giáp'} 
+                className="p-3 md:p-4 border border-blue-900/40 bg-blue-950/5 hover:border-blue-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Shield className="w-7 h-7 text-blue-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-blue-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Kim Tiền Giáp<br/>(+500 Sinh Lực HP)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">2,000</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2000 * priceMultiplier))}</span>
               </button>
               
               {/* Accessory */}
               <button 
-                onClick={() => buyItem(3000, { name: 'Vạn Niên Đăng Thần Ngọc Giới Chỉ', type: 'accessory', rarity: 'pink', power: 20, tier: 1 }, 'accessory')} 
-                disabled={gameState.gold < 3000 || gameState.player.equipment.accessory?.name === 'Vạn Niên Đăng Thần Ngọc Giới Chỉ'} 
-                className="p-3 md:p-4 border border-green-900/40 bg-green-950/5 hover:border-green-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(3000 * priceMultiplier), { name: 'Vạn Niên Đăng Thần Ngọc Giới Chỉ', type: 'accessory', rarity: 'pink', power: 20, tier: 1 }, 'accessory')} 
+                disabled={gameState.gold < Math.floor(3000 * priceMultiplier) || gameState.player.equipment.accessory?.name === 'Vạn Niên Đăng Thần Ngọc Giới Chỉ'} 
+                className="p-3 md:p-4 border border-green-900/40 bg-green-950/5 hover:border-green-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Gem className="w-7 h-7 text-green-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-green-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Long Hoàn Chỉ<br/>(-40% CD Tuyệt Kỹ)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">3,000</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(3000 * priceMultiplier))}</span>
               </button>
 
               {/* Special */}
               <button 
-                onClick={() => buyItem(4000, { name: 'Giang Sơn Xã Tắc Đồ', type: 'special', rarity: 'pink', power: 20, tier: 1 }, 'special')} 
-                disabled={gameState.gold < 4000 || gameState.player.equipment.special?.name === 'Giang Sơn Xã Tắc Đồ'} 
-                className="p-3 md:p-4 border border-yellow-900/40 bg-yellow-950/5 hover:border-yellow-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(4000 * priceMultiplier), { name: 'Giang Sơn Xã Tắc Đồ', type: 'special', rarity: 'pink', power: 20, tier: 1 }, 'special')} 
+                disabled={gameState.gold < Math.floor(4000 * priceMultiplier) || gameState.player.equipment.special?.name === 'Giang Sơn Xã Tắc Đồ'} 
+                className="p-3 md:p-4 border border-yellow-900/40 bg-yellow-950/5 hover:border-yellow-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Star className="w-7 h-7 text-yellow-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-yellow-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Bát Quái Kính<br/>(+200% Phòng Thủ)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">4,000</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(4000 * priceMultiplier))}</span>
               </button>
 
               {/* Horse (Tọa Kỵ) */}
               <button 
-                onClick={() => buyItem(2500, { name: 'Cửu Tiêu Phượng Hoàng Kiệu', type: 'horse', rarity: 'pink', power: 20, tier: 1 }, 'horse')} 
-                disabled={gameState.gold < 2500 || gameState.player.equipment.horse?.name === 'Cửu Tiêu Phượng Hoàng Kiệu'} 
-                className="p-3 md:p-4 border border-teal-900/40 bg-teal-950/5 hover:border-teal-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(2500 * priceMultiplier), { name: 'Cửu Tiêu Phượng Hoàng Kiệu', type: 'horse', rarity: 'pink', power: 20, tier: 1 }, 'horse')} 
+                disabled={gameState.gold < Math.floor(2500 * priceMultiplier) || gameState.player.equipment.horse?.name === 'Cửu Tiêu Phượng Hoàng Kiệu'} 
+                className="p-3 md:p-4 border border-teal-900/40 bg-teal-950/5 hover:border-teal-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Award className="w-7 h-7 text-teal-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-teal-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Phượng Hoàng Kiệu<br/>(+80 Tốc Chạy)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">2,500</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2500 * priceMultiplier))}</span>
               </button>
 
               {/* Cloak (Phi Phong) */}
               <button 
-                onClick={() => buyItem(3500, { name: 'Kim Tiên Ngũ Sắc Phi Phong', type: 'cloak', rarity: 'pink', power: 20, tier: 1 }, 'cloak')} 
-                disabled={gameState.gold < 3500 || gameState.player.equipment.cloak?.name === 'Kim Tiên Ngũ Sắc Phi Phong'} 
-                className="p-3 md:p-4 border border-rose-900/40 bg-rose-950/5 hover:border-rose-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(3500 * priceMultiplier), { name: 'Kim Tiên Ngũ Sắc Phi Phong', type: 'cloak', rarity: 'pink', power: 20, tier: 1 }, 'cloak')} 
+                disabled={gameState.gold < Math.floor(3500 * priceMultiplier) || gameState.player.equipment.cloak?.name === 'Kim Tiên Ngũ Sắc Phi Phong'} 
+                className="p-3 md:p-4 border border-rose-900/40 bg-rose-950/5 hover:border-rose-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Zap className="w-7 h-7 text-rose-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-rose-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Ngũ Sắc Phi Phong<br/>(+210% Sát Chí Mạng)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">3,500</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(3500 * priceMultiplier))}</span>
               </button>
 
               {/* Seal (Mật Ấn) */}
               <button 
-                onClick={() => buyItem(2800, { name: 'Vô Lực Ma Kha Thập Mật Ấn', type: 'seal', rarity: 'pink', power: 20, tier: 1 }, 'seal')} 
-                disabled={gameState.gold < 2800 || gameState.player.equipment.seal?.name === 'Vô Lực Ma Kha Thập Mật Ấn'} 
-                className="p-3 md:p-4 border border-indigo-900/40 bg-indigo-950/5 hover:border-indigo-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(2800 * priceMultiplier), { name: 'Vô Lực Ma Kha Thập Mật Ấn', type: 'seal', rarity: 'pink', power: 20, tier: 1 }, 'seal')} 
+                disabled={gameState.gold < Math.floor(2800 * priceMultiplier) || gameState.player.equipment.seal?.name === 'Vô Lực Ma Kha Thập Mật Ấn'} 
+                className="p-3 md:p-4 border border-indigo-900/40 bg-indigo-950/5 hover:border-indigo-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Sparkles className="w-7 h-7 text-indigo-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-indigo-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Cổ Ma Thập Ấn<br/>(+50px Sát Thương/s)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">2,800</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2800 * priceMultiplier))}</span>
               </button>
 
               {/* Banner (Cờ Lệnh) */}
               <button 
-                onClick={() => buyItem(4200, { name: 'Vạn Cổ Đan Tâm Phục Ma Kỳ', type: 'banner', rarity: 'pink', power: 20, tier: 1 }, 'banner')} 
-                disabled={gameState.gold < 4200 || gameState.player.equipment.banner?.name === 'Vạn Cổ Đan Tâm Phục Ma Kỳ'} 
-                className="p-3 md:p-4 border border-orange-900/40 bg-orange-950/5 hover:border-orange-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center"
+                onClick={() => buyItem(Math.floor(4200 * priceMultiplier), { name: 'Vạn Cổ Đan Tâm Phục Ma Kỳ', type: 'banner', rarity: 'pink', power: 20, tier: 1 }, 'banner')} 
+                disabled={gameState.gold < Math.floor(4200 * priceMultiplier) || gameState.player.equipment.banner?.name === 'Vạn Cổ Đan Tâm Phục Ma Kỳ'} 
+                className="p-3 md:p-4 border border-orange-900/40 bg-orange-950/5 hover:border-orange-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
               >
                  <Trophy className="w-7 h-7 text-orange-500 group-hover:scale-115 transition-transform drop-shadow" />
                  <span className="text-orange-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight font-sans">Phục Ma Kỳ Trận<br/>(+110 HP/s Hào quang)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">4,200</span>
+                 <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(4200 * priceMultiplier))}</span>
               </button>
            </div>
         </div>
@@ -440,18 +497,28 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
                               className="bg-black hover:bg-gray-900 border rounded-lg p-2.5 flex flex-col justify-between items-center relative transition-all group/card shadow"
                               style={{ borderColor: `${rarityColor}80` }}
                             >
-                               {/* Tier level display at the top-right corner of card: 一, 二, 三 */}
+                               {/* Tier level display at the top-right corner of card */}
                                <div 
                                  className="absolute top-1 right-1.5 text-[10px] sm:text-xs font-black font-serif px-1 rounded z-20 select-none"
                                  style={{ color: rarityColor, textShadow: `0 0 6px ${rarityColor}` }}
-                                 title={`Cấp độ độ hiếm: ${item.tier === 3 ? 'Tam' : item.tier === 2 ? 'Nhị' : 'Nhất'}`}
+                                 title={`Cơ duyên: ${getTierTitleName(item.tier)}`}
                                >
-                                 {item.tier === 3 ? '三' : item.tier === 2 ? '二' : '一'}
+                                 {getTierBadge(item.tier)}
                                </div>
 
                                <span className="text-[10px] font-mono opacity-80 uppercase font-bold text-gray-450 w-full text-left">
-                                  {item.type === 'weapon' ? '🗡️' : item.type === 'armor' ? '🛡️' : item.type === 'accessory' ? '💍' : item.type === 'special' ? '🔮' : item.type === 'horse' ? '🐴' : item.type === 'cloak' ? '🧥' : item.type === 'seal' ? '🔏' : '🚩'} {item.type.substring(0, 4)}
+                                  {item.type === 'weapon' ? '🗡️' : item.type === 'armor' ? '🛡️' : item.type === 'accessory' ? '💍' : item.type === 'special' ? '🔮' : item.type === 'horse' ? '🐴' : item.type === 'cloak' ? '🧥' : item.type === 'seal' ? '🈶' : '🚩'} {item.type.substring(0, 4)}
                                </span>
+
+                               <div className="relative w-full h-14 rounded overflow-hidden border border-white/5 my-2 bg-[#050508] z-10">
+                                 <img 
+                                   src={item.type === 'weapon' ? volamWeaponsImg : item.type === 'armor' ? volamArmorImg : equipmentBg} 
+                                   className="w-full h-full object-cover object-center group-hover/card:scale-110 transition-transform duration-500" 
+                                   alt={item.name}
+                                   referrerPolicy="no-referrer"
+                                 />
+                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent pointer-events-none" />
+                               </div>
 
                                <div className="my-3 text-center">
                                   <p className="font-serif text-[10.5px] md:text-xs font-bold leading-normal line-clamp-2 px-1 mb-1" style={{ color: rarityColor }}>

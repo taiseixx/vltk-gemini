@@ -1,6 +1,9 @@
 import { MouseEvent, MutableRefObject } from 'react';
 import { GameState, Particle, FloatingText, Entity } from '../types';
+import { checkAndTriggerCombo } from '../utils/comboHelper';
 import { motion } from 'motion/react';
+// @ts-ignore
+import brocadeBg from '../assets/images/song_dynasty_brocade_pattern_1779311686941.png';
 
 interface Props {
   gameState: GameState;
@@ -153,7 +156,19 @@ export default function SkillBar({
         }
       }
       
-      const damage = (sk.baseDamage + sk.level * 25 + p.currentStats.int * 5) * buffs.dmgMult;
+      const combo = checkAndTriggerCombo(
+        idx,
+        p,
+        tx,
+        ty,
+        actualRange,
+        particlesRef.current,
+        textsRef.current,
+        shakeRef
+      );
+
+      const comboMult = combo ? combo.multiplier : 1.0;
+      const damage = (sk.baseDamage + sk.level * 25 + p.currentStats.int * 5) * buffs.dmgMult * comboMult;
       
       entitiesRef.current.forEach(e => {
         const dist = Math.hypot(e.x - tx, e.y - ty);
@@ -164,12 +179,20 @@ export default function SkillBar({
             d = Math.floor(d * (buffs.critDmgMult || 1.5));
           }
           e.hp -= d;
+          
+          let skillText = isCrit ? `💥 CHÍ MẠNG! -${d}` : `-${d}`;
+          let skillColor = isCrit ? '#f1c40f' : sk.color;
+          if (combo) {
+            skillText = isCrit ? `🔥 COMBO CRIT! -${d}` : `🔥 COMBO! -${d}`;
+            skillColor = combo.color;
+          }
+
           textsRef.current.push({
             id: Math.random(),
             x: e.x + (Math.random() - 0.5) * 20,
             y: e.y - 20 - Math.random() * 20,
-            text: isCrit ? `💥 CHÍ MẠNG! -${d}` : `-${d}`,
-            color: isCrit ? '#f1c40f' : sk.color,
+            text: skillText,
+            color: skillColor,
             life: 1.8
           });
         }
@@ -183,20 +206,33 @@ export default function SkillBar({
   const levelRequirements = [1, 1, 1, 15, 25, 30];
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 h-20 md:h-24 w-full bg-[#08080c] border-t border-white/5 px-2 md:px-12 flex items-center justify-between z-40 pointer-events-auto">
+    <footer 
+      className="fixed bottom-0 left-0 right-0 h-20 md:h-24 w-full px-2 md:px-12 flex items-center justify-between z-40 pointer-events-auto border-t border-white/5"
+      style={{
+        backgroundColor: '#1b0102',
+        backgroundImage: `
+          radial-gradient(ellipse at center, rgba(74, 3, 4, 0.15) 0%, rgba(10, 0, 1, 0.98) 100%),
+          url(${brocadeBg})
+        `,
+        backgroundSize: '220px 220px',
+        backgroundRepeat: 'repeat',
+        backgroundBlendMode: 'overlay',
+        boxShadow: '0 -8px 40px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,190,40,0.05)'
+      }}
+    >
       {/* Auto Cast Button Toggle */}
-      <div className="flex items-center gap-2 md:gap-4 hidden sm:flex">
+      <div className="flex items-center gap-2 md:gap-4 hidden sm:flex z-10">
         <button 
           onClick={() => setGameState(prev => prev ? { ...prev, auto: !prev.auto } : null)}
           className={`px-3 md:px-5 py-2 border rounded-full text-[9px] md:text-[10px] font-bold uppercase tracking-widest transition-all
-            ${gameState.auto ? 'border-green-950 text-green-500 bg-green-950/20 shadow-[0_0_15px_rgba(46,204,113,0.2)]' : 'border-gray-800 text-gray-600 bg-gray-900/10'}`}
+            ${gameState.auto ? 'border-green-800 text-green-400 bg-green-950/40 shadow-[0_0_15px_rgba(46,204,113,0.35)]' : 'border-red-950 text-red-500 bg-red-950/20'}`}
         >
           ⚡ Auto: {gameState.auto ? 'Bật' : 'Tắt'}
         </button>
       </div>
 
       {/* Skills Row - Sized compact for mobile responsive line fitting */}
-      <div className="flex gap-1.5 sm:gap-2.5 md:gap-4 mx-auto sm:mx-0 items-center">
+      <div className="flex gap-1.5 sm:gap-2.5 md:gap-4 mx-auto sm:mx-0 items-center z-10">
         {gameState.skills.map((sk, i) => {
           const reqLevel = levelRequirements[i];
           const isLvlLocked = p.level < reqLevel;
@@ -214,19 +250,41 @@ export default function SkillBar({
                 if (!isLvlLocked) useSkill(i); 
               }}
               className={`group relative w-10 h-10 sm:w-12 sm:h-12 md:w-16 md:h-16 rounded-lg flex items-center justify-center text-lg md:text-2xl transition-all cursor-pointer
-                ${isSkillLocked ? 'bg-gray-950/80 border border-gray-900/40 opacity-40' : 'shadow-md'}
+                ${isSkillLocked ? 'bg-gray-950/90 border border-gray-900/60 opacity-40' : 'shadow-md'}
                 ${!canUse && !isSkillLocked ? 'brightness-50' : ''}`}
               title={isLvlLocked ? `Cần đạt nhân vật Cấp ${reqLevel} để mở khóa khóa tuyệt môn này` : `${sk.name} (Tầm ${sk.range})`}
             >
-              {/* Spinning active ring for unlocked skills */}
+              {/* Majestic Luminous Divine Aura (Hào Quang Luminous Thánh Thể) - High Performance & Peaceful */}
               {!isSkillLocked ? (
-                <div className="absolute inset-[-2px] rounded-[10px] overflow-hidden opacity-60 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  <div 
-                    className="absolute inset-[-50%] w-[200%] h-[200%] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-spin-normal"
-                    style={{
-                      background: `conic-gradient(from 0deg, transparent 0%, ${sk.color} 40%, white 48%, transparent 50%, transparent 50%, ${sk.color} 90%, white 98%, transparent 100%)`
-                    }}
-                  />
+                <div className="absolute inset-[-4px] rounded-lg overflow-visible pointer-events-none z-20">
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <radialGradient id={`skLuminousGrad-${i}`} cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                        <stop offset="25%" stopColor={sk.color} stopOpacity="0.85" />
+                        <stop offset="65%" stopColor={sk.color} stopOpacity="0.25" />
+                        <stop offset="100%" stopColor={sk.color} stopOpacity="0" />
+                      </radialGradient>
+                    </defs>
+                    
+                    {/* Soft white core diffusing into a misty color haze */}
+                    <circle cx="50" cy="50" r="44" fill={`url(#skLuminousGrad-${i})`} className="animate-pulse origin-center" />
+                    
+                    {/* Majestic 4-point/8-point Star Light Rays spinning extremely slowly */}
+                    <g className="origin-center animate-[spin_18s_linear_infinite]">
+                      {/* Vertical & Horizontal light flares */}
+                      <path d="M50 8 L52.5 50 L50 92 L47.5 50 Z" fill={sk.color} fillOpacity="0.5" />
+                      <path d="M8 50 L50 52.5 L92 50 L50 47.5 Z" fill={sk.color} fillOpacity="0.5" />
+                      
+                      {/* 8-point royal crown flares for high-level unlocked divine/ultimate martial art moves (slot 3 or higher) */}
+                      {(i >= 2) && (
+                        <g transform="rotate(45 50 50)">
+                          <path d="M50 16 L52 50 L50 84 L48 50 Z" fill={sk.color} fillOpacity="0.4" />
+                          <path d="M16 50 L50 52 L84 50 L50 48 Z" fill={sk.color} fillOpacity="0.4" />
+                        </g>
+                      )}
+                    </g>
+                  </svg>
                 </div>
               ) : (
                 <div className="absolute inset-0 border border-gray-900 rounded-lg pointer-events-none" />
