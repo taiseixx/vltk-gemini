@@ -172,9 +172,11 @@ const SECT_DESCRIPTIONS: Record<string, { desc: string; style: string; weapon: s
 
 interface Props {
   onSelect: (id: string) => void;
+  onContinue: () => void;
+  hasSave: boolean;
 }
 
-export default function SectSelection({ onSelect }: Props) {
+export default function SectSelection({ onSelect, onContinue, hasSave }: Props) {
   const [isHdActive] = useState<boolean>(true);
   const [toastMessage] = useState<string>("");
   const [selectedSect, setSelectedSect] = useState<Sect | null>(null);
@@ -334,6 +336,18 @@ export default function SectSelection({ onSelect }: Props) {
               >
                 CHỌN MỘT CƠ DUYÊN ĐỂ KHỞI ĐIỂM HÀNH TRÌNH CỨU THẾ
               </motion.p>
+              
+              {hasSave && (
+                <motion.button
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: 0.4 }}
+                   onClick={onContinue}
+                   className="mt-3 sm:mt-6 px-6 sm:px-10 py-1.5 sm:py-2.5 bg-amber-600/30 hover:bg-amber-600/60 border border-amber-400/50 hover:border-amber-400 text-amber-200 hover:text-white font-serif font-black uppercase tracking-widest text-[10px] sm:text-sm md:text-base rounded-full shadow-[0_0_15px_rgba(212,175,55,0.3)] hover:shadow-[0_0_25px_rgba(212,175,55,0.6)] backdrop-blur-sm transition-all pointer-events-auto"
+                >
+                  📜 TIẾP TỤC GIANG HỒ
+                </motion.button>
+              )}
             </div>
           </div>
 

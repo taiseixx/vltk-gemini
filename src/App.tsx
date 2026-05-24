@@ -17,6 +17,7 @@ import StatsPopup from './components/StatsPopup';
 import StageClearOverlay from './components/StageClearOverlay';
 import ShopOverlay from './components/ShopOverlay';
 import { getCompanionForSect } from './utils/companionHelper';
+import { saveGame, loadGame, clearGameSave } from './utils/storage';
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -32,6 +33,14 @@ export default function App() {
   const sceneryRef = useRef<{ x: number; y: number; t: number; sz: number }[]>([]);
   const shakeRef = useRef(0);
 
+  // Auto-save effect
+  useEffect(() => {
+    if (gameState && gameState.state !== 'GAMEOVER') {
+      // Debounce saving every 2 seconds roughly, or handle immediately
+      saveGame(gameState);
+    }
+  }, [gameState]);
+
   const addNotification = useCallback((text: string, color: string) => {
     const id = Date.now() + Math.random();
     setNotifications(prev => [...prev, { id, text, color }]);
@@ -40,11 +49,20 @@ export default function App() {
     }, 2000);
   }, []);
 
-  const initGame = (sectId: string) => {
-    const sect = SECTS.find(s => s.id === sectId);
-    if (!sect) return;
+  const handleContinueGame = () => {
+    const saved = loadGame();
+    if (saved) {
+      setGameState(saved);
+      entitiesRef.current = saved.entities || [];
+      dropsRef.current = saved.drops || [];
+      particlesRef.current = [];
+      textsRef.current = [];
+      // Regenerate scenery
+      generateScenery();
+    }
+  };
 
-    // Split the 4000x4000 map into 20x20 grid cells of 200x200 pixels each
+  const generateScenery = () => {
     const colWidth = 200;
     const rowHeight = 200;
     const numCols = MAP_SIZE / colWidth; // 20
@@ -64,9 +82,6 @@ export default function App() {
           continue;
         }
         
-        // 80% chance of placing exactly 1 scenery item in this cell.
-        // This ensures a lovely density of ~320 elements across the whole map,
-        // but perfectly uniform and with ZERO dense overdrawing clusters.
         if (Math.random() < 0.80) {
           const jitterX = 30 + Math.random() * (colWidth - 60);
           const jitterY = 30 + Math.random() * (rowHeight - 60);
@@ -74,13 +89,23 @@ export default function App() {
           scenery.push({
             x: c * colWidth + jitterX,
             y: r * rowHeight + jitterY,
-            t: Math.floor(Math.random() * 6), // 0 to 5 (Lantern, Barricade, Tree, Flag, Catapult, Fence)
+            t: Math.floor(Math.random() * 6), // 0 to 5
             sz: 24 + Math.random() * 32
           });
         }
       }
     }
     sceneryRef.current = scenery;
+  };
+
+  const initGame = (sectId: string) => {
+    // Clear save on new game start
+    clearGameSave();
+
+    const sect = SECTS.find(s => s.id === sectId);
+    if (!sect) return;
+
+    generateScenery();
 
     const initialSkills: Skill[] = sect.skills.map((nm, i) => ({
       name: nm,
@@ -109,6 +134,7 @@ export default function App() {
       state: 'PLAYING',
       stage: 1,
       lives: 2,
+      livesBought: 0,
       gold: 0,
       exp: 0,
       mobsTotal: getMobsTotal(1),
@@ -183,7 +209,7 @@ export default function App() {
   };
 
   if (!gameState) {
-    return <SectSelection onSelect={initGame} />;
+    return <SectSelection onSelect={initGame} onContinue={handleContinueGame} hasSave={!!loadGame()} />;
   }
 
   return (
@@ -204,6 +230,7 @@ export default function App() {
 
       <Sidebar 
         gameState={gameState} 
+        setGameState={setGameState}
         onAvatarClick={() => setShowStats(true)} 
         onTargetTextClick={() => {}} 
       />

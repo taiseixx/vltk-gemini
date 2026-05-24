@@ -112,6 +112,7 @@ export interface GameState {
   state: 'SELECTING' | 'PLAYING' | 'CLEARED' | 'GAMEOVER';
   stage: number;
   lives: number;
+  livesBought: number;
   gold: number;
   exp: number;
   mobsTotal: number;

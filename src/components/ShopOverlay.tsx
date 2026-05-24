@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameState, Rarity, EquipmentType, Equipment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingBag, X, Heart, Sword, Shield, Gem, Star, Package, Award, Zap, Sparkles, Trash2, ShieldCheck, Trophy } from 'lucide-react';
+import { ShoppingBag, X, Heart, Sword, Shield, Gem, Star, Package, Award, Zap, Sparkles, Trash2, ShieldCheck, Trophy, Info } from 'lucide-react';
 import { RARITIES, RARITY_COLORS, EQUIPMENT_NAME_MAP } from '../constants';
 import { getItemCostMultiplier, formatGoldValue } from '../utils/economy';
 // @ts-ignore
@@ -10,6 +10,10 @@ import equipmentBg from '../assets/images/equipment_bg_1779367218827.png';
 import volamWeaponsImg from '../assets/images/volam_sect_weapons_1779556373416.png';
 // @ts-ignore
 import volamArmorImg from '../assets/images/volam_sect_armor_1779556389670.png';
+// @ts-ignore
+import consumablesImg from '../assets/images/vltk_consumables_potions_1779591468437.png';
+// @ts-ignore
+import bannerImg from '../assets/images/vltk_shop_banner_1779591447952.png';
 
 interface Props {
   gameState: GameState;
@@ -19,13 +23,43 @@ interface Props {
 
 export default function ShopOverlay({ gameState, setGameState, onClose }: Props) {
   const [gachaResult, setGachaResult] = useState<Equipment[] | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'gacha' | 'items' | 'consumables'>('gacha');
+  
+  const [streakCount, setStreakCount] = useState<number>(0);
+  const [streakExpiry, setStreakExpiry] = useState<number>(0);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
+
+  useEffect(() => {
+    let interval = -1;
+    if (streakExpiry > Date.now()) {
+      interval = window.setInterval(() => {
+        const now = Date.now();
+        if (now > streakExpiry) {
+           setStreakCount(0);
+           setTimeRemaining(0);
+           clearInterval(interval);
+        } else {
+           setTimeRemaining(streakExpiry - now);
+        }
+      }, 50);
+    } else {
+      setStreakCount(0);
+      setTimeRemaining(0);
+    }
+    return () => clearInterval(interval);
+  }, [streakExpiry]);
 
   const priceMultiplier = getItemCostMultiplier(gameState.stage);
-  const costLife = Math.floor(500 * priceMultiplier);
+  const costLife = Math.floor(500 * priceMultiplier * Math.pow(2, gameState.livesBought || 0));
 
   const buyLife = () => {
+    if (gameState.lives >= 5) {
+      alert("Đạo hữu không thể tàng trữ quá 5 Huyền Đan cứu mạng cùng lúc!");
+      return;
+    }
     if (gameState.gold >= costLife) {
-      setGameState(prev => prev ? { ...prev, gold: prev.gold - costLife, lives: prev.lives + 1 } : null);
+      setGameState(prev => prev ? { ...prev, gold: prev.gold - costLife, lives: prev.lives + 1, livesBought: (prev.livesBought || 0) + 1 } : null);
     }
   };
 
@@ -133,26 +167,31 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
      const results: Equipment[] = [];
      const types: EquipmentType[] = ['weapon', 'armor', 'accessory', 'special', 'horse', 'cloak', 'seal', 'banner'];
 
+     let currentStreakBonus = 0;
+     if (streakCount > 0) {
+        currentStreakBonus = Math.min(streakCount * 0.01, 0.1); // up to 10% bonus
+     }
+
      for(let i=0; i<times; i++) {
         const rand = Math.random();
         let rarity: Rarity = 'common';
         
         // Boosted rates for x10 (at least Epic on the last roll)
         if (times === 10 && i === 9) {
-           if (rand < 0.008) rarity = 'pink'; // 0.8%
-           else if (rand < 0.024) rarity = 'crimson'; // 1.6%
-           else if (rand < 0.065) rarity = 'gold_rarity'; // 4.1%
-           else if (rand < 0.20) rarity = 'emerald';
-           else if (rand < 0.45) rarity = 'legendary';
+           if (rand < 0.008 + currentStreakBonus * 0.5) rarity = 'pink'; // 0.8%
+           else if (rand < 0.024 + currentStreakBonus) rarity = 'crimson'; // 1.6%
+           else if (rand < 0.065 + currentStreakBonus) rarity = 'gold_rarity'; // 4.1%
+           else if (rand < 0.20 + currentStreakBonus) rarity = 'emerald';
+           else if (rand < 0.45 + currentStreakBonus) rarity = 'legendary';
            else rarity = 'epic'; // Guaranteed Epic or better
         } else {
-           if (rand < 0.001) rarity = 'pink'; // 0.1% class Thánh Thể
-           else if (rand < 0.004) rarity = 'crimson'; // 0.3% class Huyết Ảnh
-           else if (rand < 0.014) rarity = 'gold_rarity'; // 1.0% class Hoàng Kim
-           else if (rand < 0.045) rarity = 'emerald'; // 3.1%
-           else if (rand < 0.115) rarity = 'legendary'; // 7.0%
-           else if (rand < 0.30) rarity = 'epic'; // 18.5%
-           else if (rand < 0.65) rarity = 'rare'; // 35.0%
+           if (rand < 0.001 + currentStreakBonus * 0.1) rarity = 'pink';
+           else if (rand < 0.004 + currentStreakBonus * 0.2) rarity = 'crimson';
+           else if (rand < 0.014 + currentStreakBonus * 0.4) rarity = 'gold_rarity';
+           else if (rand < 0.045 + currentStreakBonus * 0.6) rarity = 'emerald';
+           else if (rand < 0.115 + currentStreakBonus) rarity = 'legendary';
+           else if (rand < 0.30 + currentStreakBonus) rarity = 'epic';
+           else if (rand < 0.65) rarity = 'rare';
            else rarity = 'common';
         }
         
@@ -162,10 +201,10 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
         // Balanced, exciting, progression-tuned tier distribution!
         const randTier = Math.random();
         let tier = 1;
-        if (randTier < 0.35) {
+        if (randTier < 0.35 + currentStreakBonus) {
           // 35% chance to roll current max tier
           tier = maxPossibleTier;
-        } else if (randTier < 0.60) {
+        } else if (randTier < 0.60 + currentStreakBonus) {
           // 25% chance to roll max - 1
           tier = Math.max(1, maxPossibleTier - 1);
         } else if (randTier < 0.80) {
@@ -204,6 +243,8 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
      }
 
      setGachaResult(results);
+     setStreakCount(s => s + 1);
+     setStreakExpiry(Date.now() + 5000);
      
      // Subtract the roll cost immediately
      setGameState(prev => prev ? { ...prev, gold: Math.max(0, prev.gold - cost) } : null);
@@ -316,70 +357,155 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
         exit={{ scale: 0.9, opacity: 0 }}
         className="w-full max-w-4xl bg-[#0c0c12] border-2 border-gold rounded-xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] relative"
       >
-        <div className="p-3 md:p-4 border-b border-white/5 flex justify-between items-center bg-black/40">
-          <h3 className="text-gold font-serif italic text-lg md:text-xl flex items-center gap-2 drop-shadow-md pb-0.5">
+        <div 
+           className="relative p-3 md:p-4 border-b border-white/5 flex justify-between items-center"
+           style={{
+             backgroundImage: `url(${bannerImg})`,
+             backgroundSize: 'cover',
+             backgroundPosition: 'center',
+           }}
+        >
+          <div className="absolute inset-0 bg-black/60 pointer-events-none" />
+          <h3 className="relative z-10 text-gold font-serif italic text-lg md:text-xl flex items-center gap-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] pb-0.5">
             <ShoppingBag className="w-5 h-5 animate-pulse" /> Tiệm Rèn Thương Nhân Vong Xuyên
           </h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-white p-2 bg-white/5 rounded-full cursor-pointer"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="relative z-10 text-gray-300 hover:text-white p-2 bg-black/40 rounded-full cursor-pointer transition-colors border border-white/10 hover:border-white/30"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="flex border-b border-white/5 bg-[#09090e]">
+           <button 
+             onClick={() => setActiveTab('gacha')} 
+             className={`flex-1 py-3 text-xs md:text-sm font-bold font-serif tracking-widest uppercase transition-colors relative ${activeTab === 'gacha' ? 'text-amber-400' : 'text-gray-500 hover:text-gray-300'}`}
+           >
+             Tầm Bảo
+             {activeTab === 'gacha' && <motion.div layoutId="shopTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400" />}
+           </button>
+           <button 
+             onClick={() => setActiveTab('items')} 
+             className={`flex-1 py-3 text-xs md:text-sm font-bold font-serif tracking-widest uppercase transition-colors relative ${activeTab === 'items' ? 'text-amber-400' : 'text-gray-500 hover:text-gray-300'}`}
+           >
+             Thần Khí (Cố Định)
+             {activeTab === 'items' && <motion.div layoutId="shopTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400" />}
+           </button>
+           <button 
+             onClick={() => setActiveTab('consumables')} 
+             className={`flex-1 py-3 text-xs md:text-sm font-bold font-serif tracking-widest uppercase transition-colors relative ${activeTab === 'consumables' ? 'text-amber-400' : 'text-gray-500 hover:text-gray-300'}`}
+           >
+             Linh Dược
+             {activeTab === 'consumables' && <motion.div layoutId="shopTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400" />}
+           </button>
         </div>
         
-        <div className="p-4 md:p-6 overflow-y-auto custom-scrollbar">
-           <div className="flex justify-between items-center mb-4 md:mb-6 bg-gold/10 border border-gold/20 p-3 md:p-4 rounded-lg">
+        <div className="p-4 md:p-6 overflow-y-auto custom-scrollbar flex-1">
+           <div className="flex justify-between items-center mb-4 md:mb-6 bg-gold/10 border border-gold/20 p-3 md:p-4 rounded-lg shadow-inner">
               <span className="text-gold/80 text-xs md:text-sm font-bold uppercase tracking-widest">Ngân Lượng Hiện Có</span>
               <span className="text-gold font-serif text-2xl md:text-3xl drop-shadow-sm">{gameState.gold.toLocaleString()} Vàng</span>
            </div>
            
            {priceMultiplier > 1 && (
-             <div className="mb-6 text-center px-4 py-2.5 border border-red-900/40 bg-red-950/20 rounded-lg text-red-400 font-serif text-xs md:text-sm italic">
+             <div className="mb-6 text-center px-4 py-2.5 border border-red-900/40 bg-red-950/20 rounded-lg text-red-400 font-serif text-xs md:text-sm italic shadow-inner">
                ⚠️ <span className="font-bold uppercase tracking-wide">Chiến trường khan hiếm (Ải {gameState.stage}):</span> Do ách tắc giao thương quyết liệt, giá cả toàn bộ kỳ trân dị dược tăng <span className="font-extrabold text-white text-sm bg-red-900/50 px-2 py-0.5 rounded ml-1">x{priceMultiplier}</span> lần!
              </div>
            )}
-           
-           <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Vật Phẩm Linh Dược</h4>
-           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
-              <button 
-                onClick={buyLife} 
-                disabled={gameState.gold < costLife} 
-                className="p-3 md:p-4 border border-red-900/50 bg-red-950/10 hover:border-red-500 disabled:opacity-40 disabled:hover:border-red-900/50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer w-full text-center"
-              >
-                 <Heart className="w-6 h-6 md:w-8 md:h-8 text-red-500 group-hover:scale-110 transition-transform drop-shadow" />
-                 <span className="text-red-500 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center">Hồi Sinh Đan<br/>(+1 Mạng hồi sinh)</span>
-                 <span className="text-gold text-xs font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/50">{formatGoldValue(costLife)}</span>
-              </button>
-           </div>
 
-           <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3 mt-4">Gacha Thập Liên Tầm Bảo</h4>
-           <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
-              <button 
-                onClick={() => rollGacha(1)} 
-                disabled={gameState.gold < Math.floor(200 * priceMultiplier)} 
-                className="p-4 border border-teal-900/60 bg-[#0e211e] hover:border-teal-400 disabled:opacity-40 disabled:hover:border-teal-900/60 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer w-full text-center"
-              >
-                 <Package className="w-7 h-7 md:w-8 md:h-8 text-teal-400 group-hover:rotate-6 transition-transform drop-shadow" />
-                 <span className="text-teal-300 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center">Tầm Bảo Đơn (x1)<br/>Toàn bộ 8 slot trang bị</span>
-                 <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/60 font-bold">{formatGoldValue(Math.floor(200 * priceMultiplier))} Vàng</span>
-              </button>
-              <button 
-                onClick={() => rollGacha(10)} 
-                disabled={gameState.gold < Math.floor(2000 * priceMultiplier)} 
-                className="p-4 border border-amber-950/80 bg-[#1f170c] hover:border-amber-400 disabled:opacity-40 disabled:hover:border-amber-950/80 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all relative overflow-hidden cursor-pointer w-full text-center"
-              >
-                 <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/10 to-transparent pointer-events-none" />
-                 <Package className="w-7 h-7 md:w-8 md:h-8 text-amber-500 group-hover:scale-110 transition-transform drop-shadow" />
-                 <span className="text-amber-400 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center">Thập Liên Tầm Bảo (x10)<br/>Đảm Bảo Bảo Vật Cực Phẩm!</span>
-                 <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/60 shadow-[0_0_10px_#d4af37] font-bold">{formatGoldValue(Math.floor(2000 * priceMultiplier))} Vàng</span>
-              </button>
-           </div>
+           {activeTab === 'consumables' && (
+             <div>
+               <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Vật Phẩm Linh Dược</h4>
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+                  <button 
+                    onClick={buyLife} 
+                    disabled={gameState.gold < costLife} 
+                    className="p-3 border border-red-900/50 bg-[#0c0505] hover:border-red-500 disabled:opacity-40 disabled:hover:border-red-900/50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer w-full text-center relative overflow-hidden"
+                  >
+                     <div className="w-16 h-16 rounded overflow-hidden mb-1 relative border border-white/10">
+                       <img src={consumablesImg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                       <div className="absolute inset-0 bg-gradient-to-t from-red-900/60 to-transparent mix-blend-overlay pointer-events-none" />
+                     </div>
+                     <span className="text-red-500 font-bold uppercase text-[9px] md:text-[10px] tracking-widest text-center relative z-10">Hồi Sinh Đan<br/>(+1 Mạng hồi sinh)</span>
+                     <span className="text-gold text-xs font-serif border border-gold/30 px-3 py-0.5 rounded bg-black/80 relative z-10">{formatGoldValue(costLife)}</span>
+                  </button>
+               </div>
+             </div>
+           )}
 
-           <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Thần Khí Truyền Thuyết Võ Lâm</h4>
-           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 font-serif">
+           {activeTab === 'gacha' && (
+             <div>
+               <div className="flex justify-between items-center mb-3">
+                 <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em]">Gacha Thập Liên Tầm Bảo</h4>
+                 <button onClick={() => setShowInfo(!showInfo)} className="text-amber-500 hover:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 p-1 rounded-full px-2 text-xs font-bold font-sans flex items-center gap-1 transition-colors">
+                   <Info className="w-3 h-3" /> Chi Tiết Tỷ Lệ
+                 </button>
+               </div>
+               
+               <AnimatePresence>
+                 {showInfo && (
+                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-4">
+                     <div className="p-3 bg-amber-950/20 border border-amber-500/20 rounded-lg text-[10px] sm:text-xs text-amber-200/80 font-sans space-y-2">
+                       <p className="font-bold text-amber-400">Tỷ lệ Tầm Bảo cơ bản:</p>
+                       <ul className="list-disc pl-5 space-y-0.5 text-amber-100/70">
+                         <li><span className="text-[#FF00FF] font-bold">Thánh Thể (Pink):</span> 0.1%</li>
+                         <li><span className="text-[#DC143C] font-bold">Huyết Ảnh (Crimson):</span> 0.3%</li>
+                         <li><span className="text-[#FFD700] font-bold">Hoàng Kim (Gold):</span> 1.0%</li>
+                         <li><span className="text-[#50C878] font-bold">Lục Bảo (Emerald):</span> 3.1%</li>
+                         <li>Thần Tiên (Legendary): 7.0%, Hiếm (Epic): 18.5%, Tinh Anh (Rare): 35.0%, Thường: 35.0%</li>
+                       </ul>
+                       <p className="font-bold text-amber-400 mt-2">Bảo Hiểm Thập Liên (x10): Món cuối cùng cam kết từ Epic trở lên và x8 tỷ lệ ra đồ tối thượng!</p>
+                       <p className="font-bold text-green-400 mt-2">🔥 Cuồng Nhiệt Combo: Mua liên tiếp trong 5s để tích lũy % tăng vọt tỷ lệ ra đồ hiếm (Cộng dồn tối đa 10%).</p>
+                     </div>
+                   </motion.div>
+                 )}
+               </AnimatePresence>
+
+               <div className="grid grid-cols-2 gap-3 md:gap-4 mb-2">
+                  <button 
+                    onClick={() => rollGacha(1)} 
+                    disabled={gameState.gold < Math.floor(200 * priceMultiplier)} 
+                    className="p-5 border border-teal-900/60 bg-[#0e1615] hover:border-teal-500 disabled:opacity-40 disabled:hover:border-teal-900/60 rounded-xl flex flex-col items-center justify-center gap-3 group transition-all cursor-pointer w-full text-center relative overflow-hidden"
+                  >
+                     <div className="absolute right-0 top-0 w-32 h-32 bg-teal-500/5 blur-3xl group-hover:bg-teal-500/10 pointer-events-none transition-all" />
+                     <Package className="w-8 h-8 md:w-10 md:h-10 text-teal-400 group-hover:rotate-6 transition-transform drop-shadow relative z-10" />
+                     <span className="text-teal-300 font-bold uppercase text-[9px] md:text-[11px] tracking-widest text-center relative z-10">Tầm Bảo (x1)</span>
+                     <span className="text-gold text-xs sm:text-sm font-serif border border-gold/30 px-3 py-1 rounded bg-black/60 font-bold relative z-10">{formatGoldValue(Math.floor(200 * priceMultiplier))}</span>
+                  </button>
+                  <button 
+                    onClick={() => rollGacha(10)} 
+                    disabled={gameState.gold < Math.floor(2000 * priceMultiplier)} 
+                    className="p-5 border border-amber-500/40 bg-[#1f170c] hover:border-amber-400 disabled:opacity-40 disabled:hover:border-amber-950/80 rounded-xl flex flex-col items-center justify-center gap-3 group transition-all relative overflow-hidden cursor-pointer w-full text-center shadow-[0_0_20px_rgba(245,158,11,0.05)] hover:shadow-[0_0_30px_rgba(245,158,11,0.15)]"
+                  >
+                     <div className="absolute inset-0 bg-gradient-to-tr from-amber-500/10 to-transparent pointer-events-none" />
+                     <div className="absolute -right-4 -top-4 w-32 h-32 bg-amber-500/10 blur-3xl group-hover:bg-amber-500/20 pointer-events-none transition-all" />
+                     
+                     {streakCount > 0 && (
+                        <div className="absolute top-2 left-2 right-2 flex justify-between items-center z-20">
+                          <span className="bg-red-500 text-white font-black text-[9px] px-2 py-0.5 rounded shadow">🔥 COMBO x{streakCount}</span>
+                          <span className="text-red-400 font-mono text-[10px] font-bold">{(timeRemaining/1000).toFixed(1)}s</span>
+                        </div>
+                     )}
+                     {streakCount > 0 && (
+                        <div className="absolute top-0 left-0 h-1 bg-red-500 z-20 transition-all duration-75" style={{ width: `${(timeRemaining / 5000) * 100}%` }} />
+                     )}
+
+                     <Package className="w-8 h-8 md:w-10 md:h-10 text-amber-400 group-hover:scale-110 transition-transform drop-shadow-[0_2px_10px_rgba(245,158,11,0.4)] relative z-10 mt-2" />
+                     <span className="text-amber-400 font-bold uppercase text-[9px] md:text-[11px] tracking-widest text-center relative z-10">Thập Liên (x10)<br/><span className="text-[8px] text-amber-200/60 font-sans tracking-normal">Bảo hiểm 100% rớt Thần Khí</span></span>
+                     <span className="text-gold text-xs sm:text-sm font-serif border border-gold/40 px-3 py-1 rounded bg-black/80 shadow-[0_0_10px_#d4af37] font-bold relative z-10">{formatGoldValue(Math.floor(2000 * priceMultiplier))}</span>
+                  </button>
+               </div>
+             </div>
+           )}
+
+           {activeTab === 'items' && (
+             <div>
+               <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Thần Khí Truyền Thuyết Võ Lâm</h4>
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 font-serif">
               {/* Weapon */}
               <button 
                 onClick={() => buyItem(Math.floor(2500 * priceMultiplier), { name: 'Ỷ Thiên Thần Kiếm', type: 'weapon', rarity: 'pink', power: 20, tier: 1 }, 'weapon')} 
                 disabled={gameState.gold < Math.floor(2500 * priceMultiplier) || gameState.player.equipment.weapon?.name === 'Ỷ Thiên Thần Kiếm'} 
-                className="p-3 md:p-4 border border-purple-900/40 bg-purple-950/5 hover:border-purple-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-purple-900/40 bg-purple-950/5 hover:border-purple-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Sword className="w-7 h-7 text-purple-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={volamWeaponsImg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-purple-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Ỷ Thiên Kiếm<br/>(+50 Lực Tay dmg)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2500 * priceMultiplier))}</span>
               </button>
@@ -388,9 +514,11 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(2000 * priceMultiplier), { name: 'Hoàng Kim Chiến Giáp', type: 'armor', rarity: 'pink', power: 20, tier: 1 }, 'armor')} 
                 disabled={gameState.gold < Math.floor(2000 * priceMultiplier) || gameState.player.equipment.armor?.name === 'Hoàng Kim Chiến Giáp'} 
-                className="p-3 md:p-4 border border-blue-900/40 bg-blue-950/5 hover:border-blue-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-blue-900/40 bg-blue-950/5 hover:border-blue-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Shield className="w-7 h-7 text-blue-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={volamArmorImg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-blue-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Kim Tiền Giáp<br/>(+500 Sinh Lực HP)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2000 * priceMultiplier))}</span>
               </button>
@@ -399,9 +527,11 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(3000 * priceMultiplier), { name: 'Vạn Niên Đăng Thần Ngọc Giới Chỉ', type: 'accessory', rarity: 'pink', power: 20, tier: 1 }, 'accessory')} 
                 disabled={gameState.gold < Math.floor(3000 * priceMultiplier) || gameState.player.equipment.accessory?.name === 'Vạn Niên Đăng Thần Ngọc Giới Chỉ'} 
-                className="p-3 md:p-4 border border-green-900/40 bg-green-950/5 hover:border-green-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-green-900/40 bg-green-950/5 hover:border-green-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Gem className="w-7 h-7 text-green-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={equipmentBg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-green-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Long Hoàn Chỉ<br/>(-40% CD Tuyệt Kỹ)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(3000 * priceMultiplier))}</span>
               </button>
@@ -410,9 +540,11 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(4000 * priceMultiplier), { name: 'Giang Sơn Xã Tắc Đồ', type: 'special', rarity: 'pink', power: 20, tier: 1 }, 'special')} 
                 disabled={gameState.gold < Math.floor(4000 * priceMultiplier) || gameState.player.equipment.special?.name === 'Giang Sơn Xã Tắc Đồ'} 
-                className="p-3 md:p-4 border border-yellow-900/40 bg-yellow-950/5 hover:border-yellow-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-yellow-900/40 bg-yellow-950/5 hover:border-yellow-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Star className="w-7 h-7 text-yellow-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={equipmentBg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-yellow-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Bát Quái Kính<br/>(+200% Phòng Thủ)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(4000 * priceMultiplier))}</span>
               </button>
@@ -421,9 +553,11 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(2500 * priceMultiplier), { name: 'Cửu Tiêu Phượng Hoàng Kiệu', type: 'horse', rarity: 'pink', power: 20, tier: 1 }, 'horse')} 
                 disabled={gameState.gold < Math.floor(2500 * priceMultiplier) || gameState.player.equipment.horse?.name === 'Cửu Tiêu Phượng Hoàng Kiệu'} 
-                className="p-3 md:p-4 border border-teal-900/40 bg-teal-950/5 hover:border-teal-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-teal-900/40 bg-teal-950/5 hover:border-teal-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Award className="w-7 h-7 text-teal-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={equipmentBg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-teal-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Phượng Hoàng Kiệu<br/>(+80 Tốc Chạy)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2500 * priceMultiplier))}</span>
               </button>
@@ -432,9 +566,11 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(3500 * priceMultiplier), { name: 'Kim Tiên Ngũ Sắc Phi Phong', type: 'cloak', rarity: 'pink', power: 20, tier: 1 }, 'cloak')} 
                 disabled={gameState.gold < Math.floor(3500 * priceMultiplier) || gameState.player.equipment.cloak?.name === 'Kim Tiên Ngũ Sắc Phi Phong'} 
-                className="p-3 md:p-4 border border-rose-900/40 bg-rose-950/5 hover:border-rose-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-rose-900/40 bg-rose-950/5 hover:border-rose-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Zap className="w-7 h-7 text-rose-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={equipmentBg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-rose-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Ngũ Sắc Phi Phong<br/>(+210% Sát Chí Mạng)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(3500 * priceMultiplier))}</span>
               </button>
@@ -443,9 +579,11 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(2800 * priceMultiplier), { name: 'Vô Lực Ma Kha Thập Mật Ấn', type: 'seal', rarity: 'pink', power: 20, tier: 1 }, 'seal')} 
                 disabled={gameState.gold < Math.floor(2800 * priceMultiplier) || gameState.player.equipment.seal?.name === 'Vô Lực Ma Kha Thập Mật Ấn'} 
-                className="p-3 md:p-4 border border-indigo-900/40 bg-indigo-950/5 hover:border-indigo-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-indigo-900/40 bg-indigo-950/5 hover:border-indigo-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Sparkles className="w-7 h-7 text-indigo-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={equipmentBg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-indigo-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight">Cổ Ma Thập Ấn<br/>(+50px Sát Thương/s)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(2800 * priceMultiplier))}</span>
               </button>
@@ -454,13 +592,17 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
               <button 
                 onClick={() => buyItem(Math.floor(4200 * priceMultiplier), { name: 'Vạn Cổ Đan Tâm Phục Ma Kỳ', type: 'banner', rarity: 'pink', power: 20, tier: 1 }, 'banner')} 
                 disabled={gameState.gold < Math.floor(4200 * priceMultiplier) || gameState.player.equipment.banner?.name === 'Vạn Cổ Đan Tâm Phục Ma Kỳ'} 
-                className="p-3 md:p-4 border border-orange-900/40 bg-orange-950/5 hover:border-orange-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full min-h-[140px]"
+                className="p-3 md:p-4 border border-orange-900/40 bg-orange-950/5 hover:border-orange-500 disabled:opacity-50 rounded-lg flex flex-col items-center justify-center gap-2 group transition-all cursor-pointer text-center w-full relative overflow-hidden"
               >
-                 <Trophy className="w-7 h-7 text-orange-500 group-hover:scale-115 transition-transform drop-shadow" />
+                 <div className="w-16 h-16 rounded border border-white/10 overflow-hidden relative">
+                   <img src={equipmentBg} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                 </div>
                  <span className="text-orange-400 font-bold uppercase text-[8.5px] md:text-[9.5px] tracking-widest leading-tight font-sans">Phục Ma Kỳ Trận<br/>(+110 HP/s Hào quang)</span>
                  <span className="text-gold text-xs font-serif border border-gold/30 px-2.5 py-0.5 rounded bg-black/50 font-bold">{formatGoldValue(Math.floor(4200 * priceMultiplier))}</span>
               </button>
+            </div>
            </div>
+          )}
         </div>
       </motion.div>
 

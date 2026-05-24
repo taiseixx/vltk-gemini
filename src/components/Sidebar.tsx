@@ -11,6 +11,7 @@ import volamArmorImg from '../assets/images/volam_sect_armor_1779556389670.png';
 
 interface Props {
   gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   onAvatarClick: () => void;
   onTargetTextClick: () => void;
 }
@@ -25,7 +26,7 @@ const formatGold = (value: number): string => {
   return value.toLocaleString('en-US');
 };
 
-export default function Sidebar({ gameState, onAvatarClick }: Props) {
+export default function Sidebar({ gameState, setGameState, onAvatarClick }: Props) {
   const p = gameState.player;
   const eq = p.equipment;
   const sect = SECTS.find(s => s.color === p.color);
@@ -109,7 +110,11 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
                   <circle cx="50" cy="50" r="44" fill={`url(#slotLuminous-${slotKey})`} className="animate-pulse origin-center" />
                   
                   {/* Majestic 4-point/8-point Star Light Rays spinning serenely slowly (equal to skill tempo) */}
-                  <g className="origin-center animate-[spin_18s_linear_infinite]">
+                  <motion.g 
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 18, ease: "linear" }}
+                    style={{ originX: "50px", originY: "50px" }}
+                  >
                     {/* Primary vertical and horizontal slender diamonds */}
                     <path d="M50 8 L52.5 50 L50 92 L47.5 50 Z" fill={rarityColor} fillOpacity="0.5" />
                     <path d="M8 50 L50 52.5 L92 50 L50 47.5 Z" fill={rarityColor} fillOpacity="0.5" />
@@ -121,7 +126,7 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
                         <path d="M16 50 L50 52 L84 50 L50 48 Z" fill={rarityColor} fillOpacity="0.4" />
                       </g>
                     )}
-                  </g>
+                  </motion.g>
                 </svg>
               </div>
               <div className="absolute inset-[2.5px] rounded bg-gray-900 z-10 pointer-events-none"
@@ -203,46 +208,48 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
           {showEquipment ? "👁️ Ẩn Trang Bị" : "🎒 Hiện Trang Bị"}
         </button>
         
-        <AnimatePresence>
-          {showEquipment && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, x: 20 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.95, x: 20 }}
-              className="relative p-3.5 flex flex-col items-center rounded-xl border border-white/15 pointer-events-auto min-w-[145px] md:min-w-[165px] select-none"
-              style={{
-                backgroundColor: 'rgba(23, 10, 12, 0.40)', // Liquid glass with 40% opacity
-                backgroundImage: `
-                  radial-gradient(circle at center, rgba(30, 5, 8, 0.45) 0%, rgba(5, 1, 2, 0.9) 100%),
-                  url(${equipmentBg})
-                `,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundBlendMode: 'overlay',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
-                boxShadow: '0 12px 40px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.15)',
-              }}
-            >
-              <p className="text-[9px] md:text-[11px] text-gray-350 font-bold mb-2 uppercase tracking-[0.2em] font-serif border-b border-white/10 pb-1 w-full text-center" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Trang Bị</p>
-              <div className="grid grid-cols-2 gap-x-2.5 gap-y-2">
-                <Slot type="Vũ khí" item={eq.weapon} emoji="🗡️" slotKey="weapon" />
-                <Slot type="Giáp" item={eq.armor} emoji="🛡️" slotKey="armor" />
-                <Slot type="Trang sức" item={eq.accessory} emoji="💍" slotKey="accessory" />
-                <Slot type="Bảo vật" item={eq.special} emoji="🔮" slotKey="special" />
-                <Slot type="Tọa kỵ" item={eq.horse} emoji="🐴" slotKey="horse" />
-                <Slot type="Phi phong" item={eq.cloak} emoji="🧥" slotKey="cloak" />
-                <Slot type="Mật ấn" item={eq.seal} emoji="🈶" slotKey="seal" />
-                <Slot type="Cờ lệnh" item={eq.banner} emoji="🚩" slotKey="banner" />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="flex flex-row-reverse items-start gap-4">
+          <AnimatePresence>
+            {showEquipment && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, x: 20 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.95, x: 20 }}
+                className="relative p-3.5 flex flex-col items-center rounded-xl border border-white/15 pointer-events-auto min-w-[145px] md:min-w-[165px] select-none"
+                style={{
+                  backgroundColor: 'rgba(23, 10, 12, 0.40)', // Liquid glass with 40% opacity
+                  backgroundImage: `
+                    radial-gradient(circle at center, rgba(30, 5, 8, 0.45) 0%, rgba(5, 1, 2, 0.9) 100%),
+                    url(${equipmentBg})
+                  `,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundBlendMode: 'overlay',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.15)',
+                }}
+              >
+                <p className="text-[9px] md:text-[11px] text-gray-350 font-bold mb-2 uppercase tracking-[0.2em] font-serif border-b border-white/10 pb-1 w-full text-center" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Trang Bị</p>
+                <div className="grid grid-cols-2 gap-x-2.5 gap-y-2">
+                  <Slot type="Vũ khí" item={eq.weapon} emoji="🗡️" slotKey="weapon" />
+                  <Slot type="Giáp" item={eq.armor} emoji="🛡️" slotKey="armor" />
+                  <Slot type="Trang sức" item={eq.accessory} emoji="💍" slotKey="accessory" />
+                  <Slot type="Bảo vật" item={eq.special} emoji="🔮" slotKey="special" />
+                  <Slot type="Tọa kỵ" item={eq.horse} emoji="🐴" slotKey="horse" />
+                  <Slot type="Phi phong" item={eq.cloak} emoji="🧥" slotKey="cloak" />
+                  <Slot type="Mật ấn" item={eq.seal} emoji="🈶" slotKey="seal" />
+                  <Slot type="Cờ lệnh" item={eq.banner} emoji="🚩" slotKey="banner" />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        {/* Dynamic Equipment Description Card Panel */}
-        <AnimatePresence>
-          {showEquipment && selectedSelectedDescCard(selectedGear)}
-        </AnimatePresence>
+          {/* Dynamic Equipment Description Card Panel */}
+          <AnimatePresence>
+            {showEquipment && selectedSelectedDescCard(selectedGear)}
+          </AnimatePresence>
+        </div>
       </aside>
 
       {/* Stats Help Modal Dialog */}
@@ -361,10 +368,10 @@ export default function Sidebar({ gameState, onAvatarClick }: Props) {
 
     return (
       <motion.div 
-        initial={{ opacity: 0, x: -20, scale: 0.95 }}
+        initial={{ opacity: 0, x: 20, scale: 0.95 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
-        exit={{ opacity: 0, x: -20, scale: 0.95 }}
-        className="fixed top-24 sm:top-28 left-4 right-4 sm:right-auto w-auto sm:w-[285px] rounded-xl p-4 border border-white/15 shadow-[0_12px_42px_rgba(0,0,0,0.95)] pointer-events-auto flex flex-col items-stretch text-left font-serif z-50 text-xs text-gray-300 max-h-[42vh] sm:max-h-none overflow-y-auto"
+        exit={{ opacity: 0, x: 20, scale: 0.95 }}
+        className="relative w-full sm:w-[285px] rounded-xl p-4 border border-white/15 shadow-[0_12px_42px_rgba(0,0,0,0.95)] pointer-events-auto flex flex-col items-stretch text-left font-serif z-50 text-xs text-gray-300 max-h-[80vh] overflow-y-auto"
         style={{
           backgroundColor: 'rgba(23, 10, 12, 0.40)', // Liquid glass styled at 40% opacity
           backgroundImage: `

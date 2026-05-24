@@ -271,7 +271,11 @@ export default function SkillBar({
                     <circle cx="50" cy="50" r="44" fill={`url(#skLuminousGrad-${i})`} className="animate-pulse origin-center" />
                     
                     {/* Majestic 4-point/8-point Star Light Rays spinning extremely slowly */}
-                    <g className="origin-center animate-[spin_18s_linear_infinite]">
+                    <motion.g 
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 18, ease: "linear" }}
+                      style={{ originX: "50px", originY: "50px" }}
+                    >
                       {/* Vertical & Horizontal light flares */}
                       <path d="M50 8 L52.5 50 L50 92 L47.5 50 Z" fill={sk.color} fillOpacity="0.5" />
                       <path d="M8 50 L50 52.5 L92 50 L50 47.5 Z" fill={sk.color} fillOpacity="0.5" />
@@ -283,7 +287,7 @@ export default function SkillBar({
                           <path d="M16 50 L50 52 L84 50 L50 48 Z" fill={sk.color} fillOpacity="0.4" />
                         </g>
                       )}
-                    </g>
+                    </motion.g>
                   </svg>
                 </div>
               ) : (
