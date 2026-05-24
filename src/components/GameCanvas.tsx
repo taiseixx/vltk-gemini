@@ -17,7 +17,6 @@ import {
   SECTS,
 } from "../constants";
 import { checkAndTriggerCombo } from "../utils/comboHelper";
-import { cc } from "../lib/cocos";
 import { SECT_LEVEL_MANUALS } from "../utils/quest";
 import { perfLogger } from "../utils/perfLogger";
 import grassImg from "../assets/images/wuxia_grassland_environment_1779601113241.png";
@@ -289,14 +288,6 @@ export default function GameCanvas({
   });
 
   const companionAtkTimerRef = useRef(0);
-  const cocosSceneRef = useRef<cc.Node>(new cc.Node());
-  const cocosParticlesRef = useRef<cc.ParticleSystem>(new cc.ParticleSystem());
-
-  useEffect(() => {
-    cc.director.registerScene("BattleScene", cocosSceneRef.current);
-    cc.director.loadScene("BattleScene");
-    cocosSceneRef.current.addChild(cocosParticlesRef.current);
-  }, []);
 
   const TOTAL_RESOURCES = 31;
   const loadedResourcesRef = useRef(0);
@@ -1516,31 +1507,11 @@ export default function GameCanvas({
     }
 
     // Spawn extremely smooth, animated Cocos-Engine Custom Label
-    const cocosLabel = new cc.Label(dmgText, pRef.rageActive ? 17 : 13, txtColor);
-    cocosLabel.x = e.x;
-    cocosLabel.y = e.y - 30;
-    cocosLabel.strokeColor = "#0a0a0a";
-    cocosLabel.strokeWidth = 3.5;
-    cocosLabel.fontFamily = "system-ui, -apple-system, sans-serif";
-    
-    const distanceUp = -50 - Math.random() * 30;
-    const animDuration = pRef.rageActive ? 1.3 : 0.95;
-    cocosLabel.runAction(
-      cc.sequence(
-        cc.moveTo(animDuration, e.x, e.y - 30 + distanceUp),
-        cc.callFunc(() => {
-          cocosSceneRef.current.removeChild(cocosLabel);
-        })
-      )
-    );
-    cocosLabel.runAction(cc.fadeTo(animDuration, 0));
-    cocosSceneRef.current.addChild(cocosLabel);
+    // (Replaced by textsRef.current.push above — cocos engine removed in cleanup-and-split)
 
     // Particles themed by Element or default
     const particleColor = elColor[playerEl] || col;
-    
-    // Trigger Cocos-based Particle System for premium rendering spark impacts
-    cocosParticlesRef.current.spawn(e.x, e.y, particleColor, pRef.rageActive ? 3.5 : 2.5, pRef.rageActive ? 14 : 7);
+
     if (particlesRef.current.length < 120) {
       for (let i = 0; i < (pRef.rageActive ? 8 : 5); i++) {
         const angle =
@@ -2040,7 +2011,6 @@ export default function GameCanvas({
     lastTimeRef.current = time;
 
     update(dt);
-    cc.director.update(dt);
 
     // Companion Autonomous Battle Strike (Tốc đánh, kĩ năng theo đẳng cấp & trang bị!)
     const comp = stateRef.current.companion;
@@ -3034,11 +3004,7 @@ export default function GameCanvas({
       }
     }
 
-    // Cocos Engine Render Pass
-    ctx.save();
-    ctx.translate(-cx, -cy);
-    cocosSceneRef.current.render(ctx);
-    ctx.restore();
+    // Cocos Engine Render Pass removed in cleanup-and-split (engine deleted)
 
     // Floating Texts
     ctx.font = "bold 16px font-serif";

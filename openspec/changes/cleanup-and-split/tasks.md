@@ -1,21 +1,21 @@
 ## 1. Pre-flight & Branch Setup
 
-- [ ] 1.1 Tạo branch `refactor/cleanup-and-split` từ main
-- [ ] 1.2 Verify build hiện tại: `npm install && npm run lint && npm run build` đều pass
-- [ ] 1.3 Smoke test pre-cleanup: chạy `npm run dev`, chọn Thiếu Lâm, chơi stage 1-3, ghi lại FPS (mở F3 nếu có perf overlay), chụp 5 screenshot mốc (sect select, stage 1 start, mid-fight, boss, stage clear)
-- [ ] 1.4 Commit `chore: pre-cleanup checkpoint` (empty commit) và tag `pre-cleanup`
+- [x] 1.1 Tạo branch `refactor/cleanup-and-split` từ main
+- [x] 1.2 Verify build hiện tại: `npm install && npm run lint && npm run build` đều pass
+- [~] 1.3 Smoke test pre-cleanup: **SKIPPED per user decision** — accepting risk of no pixel/FPS parity check at end
+- [x] 1.4 Commit `chore: pre-cleanup checkpoint` (empty commit) và tag `pre-cleanup`
 
 ## 2. Checkpoint 1 — Xóa dead deps và cocos engine
 
-- [ ] 2.1 Sửa `src/components/GameCanvas.tsx`: xóa 3 dòng `import { cc } from "../lib/cocos"`, `cocosSceneRef`, `cocosParticlesRef`, `useEffect` setup cocos (≈10 dòng)
-- [ ] 2.2 Thay thế đoạn dùng `cc.Label + cc.sequence(...)` (quanh dòng 1519-1536) bằng `textsRef.current.push({ id, x, y, text, color, life })` với life tương đương duration animation cũ
-- [ ] 2.3 Xóa `cc.director.update(dt)` ở game loop (dòng 2043)
-- [ ] 2.4 Xóa thư mục `src/lib/cocos/` hoàn toàn
-- [ ] 2.5 Gỡ `@google/genai`, `pixi.js`, `@pixi/react`, `pixi-filters` khỏi `package.json` dependencies
-- [ ] 2.6 Chạy `npm install` để regenerate `package-lock.json`
-- [ ] 2.7 Verify: `grep -r "cc\." src/` zero matches, `grep -r "from '\(pixi\|@pixi\|@google/genai\)" src/ server.ts vite.config.ts` zero matches
-- [ ] 2.8 `npm run lint && npm run build` pass
-- [ ] 2.9 Smoke test stage 1: damage label vẫn fade-up bình thường, không error console
+- [x] 2.1 Sửa `src/components/GameCanvas.tsx`: xóa 3 dòng `import { cc } from "../lib/cocos"`, `cocosSceneRef`, `cocosParticlesRef`, `useEffect` setup cocos (≈10 dòng)
+- [x] 2.2 Thay thế đoạn dùng `cc.Label + cc.sequence(...)` (quanh dòng 1519-1536) bằng `textsRef.current.push({ id, x, y, text, color, life })` với life tương đương duration animation cũ — **NOTE**: existing `textsRef.current.push` block immediately above the cocos block already does this with `life: pRef.rageActive ? 1.6 : 1.2`. Cocos block was a duplicate. Removed it.
+- [x] 2.3 Xóa `cc.director.update(dt)` ở game loop (dòng 2043)
+- [x] 2.4 Xóa thư mục `src/lib/cocos/` hoàn toàn
+- [x] 2.5 Gỡ `@google/genai`, `pixi.js`, `@pixi/react`, `pixi-filters` khỏi `package.json` dependencies
+- [x] 2.6 Chạy `npm install` để regenerate `package-lock.json` — 58 packages removed. **Side-effect**: had to add `@types/react` + `@types/react-dom` to devDependencies (they were transitively pulled in by `@pixi/react` peer deps and the project never declared them itself)
+- [x] 2.7 Verify: `grep -r "cc\." src/` zero matches, `grep -r "from '\(pixi\|@pixi\|@google/genai\)" src/ server.ts vite.config.ts` zero matches
+- [x] 2.8 `npm run lint && npm run build` pass — JS bundle 580 KB → 574 KB
+- [~] 2.9 Smoke test stage 1: damage label vẫn fade-up bình thường, không error console — **PENDING USER SMOKE TEST**
 - [ ] 2.10 Commit `refactor: remove cocos engine and unused dependencies`
 
 ## 3. Checkpoint 2 — Tách render/imageProcessing và render/imageCache
