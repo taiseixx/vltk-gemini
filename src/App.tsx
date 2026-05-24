@@ -32,14 +32,54 @@ export default function App() {
   const dropsRef = useRef<Drop[]>([]);
   const sceneryRef = useRef<{ x: number; y: number; t: number; sz: number }[]>([]);
   const shakeRef = useRef(0);
+  const cameraRef = useRef({ x: MAP_SIZE / 2, y: MAP_SIZE / 2 });
+
+  const [geminiEncounters, setGeminiEncounters] = useState<any[] | null>(null);
 
   // Auto-save effect
   useEffect(() => {
     if (gameState && gameState.state !== 'GAMEOVER') {
-      // Debounce saving every 2 seconds roughly, or handle immediately
       saveGame(gameState);
     }
   }, [gameState]);
+
+  // Pre-fetch Gemini encounters when a new stage starts
+  useEffect(() => {
+    if (gameState?.state === 'PLAYING') {
+      setGeminiEncounters(null);
+      const fetchEncounters = async () => {
+        try {
+          const payload = {
+            gameState: {
+              stage: gameState.stage,
+              gold: gameState.gold,
+              player: {
+                hp: gameState.player.hp,
+                maxHp: gameState.player.maxHp,
+                sectId: gameState.player.sectId || 'Vô Danh'
+              }
+            }
+          };
+
+          const res = await fetch('/api/encounter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            setGeminiEncounters(data);
+          }
+        } catch (e) {
+          console.error("Failed to prefetch encounters", e);
+        }
+      };
+      
+      // Give the stage a short moment to render before firing API
+      setTimeout(fetchEncounters, 1000);
+    }
+  }, [gameState?.state, gameState?.stage]);
 
   const addNotification = useCallback((text: string, color: string) => {
     const id = Date.now() + Math.random();
@@ -223,6 +263,7 @@ export default function App() {
         dropsRef={dropsRef}
         sceneryRef={sceneryRef}
         shakeRef={shakeRef}
+        cameraRef={cameraRef}
         addNotification={addNotification}
       />
 
@@ -270,6 +311,7 @@ export default function App() {
             gameState={gameState}
             setGameState={setGameState}
             addNotification={addNotification}
+            geminiEncounters={geminiEncounters}
           />
         )}
       </AnimatePresence>

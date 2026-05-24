@@ -18,13 +18,119 @@ import {
 } from "../constants";
 import { checkAndTriggerCombo } from "../utils/comboHelper";
 import { cc } from "../lib/cocos";
-import grassImg from "../assets/images/battlefield_grass_texture_1779384494268.png";
+import grassImg from "../assets/images/wuxia_grassland_environment_1779601113241.png";
+import stoneImg from "../assets/images/wuxia_stone_floor_1779601135174.png";
 import barricadeImg from "../assets/images/battlefield_barricade_1779384521972.png";
 import treeImg from "../assets/images/battlefield_tree_1779552597802.png";
 import catapultImg from "../assets/images/battlefield_catapult_1779552618735.png";
 import flagImg from "../assets/images/battlefield_flag_1779552636708.png";
 import lanternImg from "../assets/images/battlefield_lantern_1779552656984.png";
 import fenceImg from "../assets/images/battlefield_fence_1779552677346.png";
+import wuxiaPlayerImg from "../assets/images/wuxia_player_1779601606599.png";
+import wuxiaMobImg from "../assets/images/wuxia_mob_1779601627426.png";
+import wuxiaBossImg from "../assets/images/wuxia_boss_1779601644081.png";
+
+// Importing 10 Sect Player images
+import slPlayerImg from "../assets/images/wuxia_player_sl_1779612143780.png";
+import vdPlayerImg from "../assets/images/wuxia_player_vd_1779612165092.png";
+import cbPlayerImg from "../assets/images/wuxia_player_cb_1779612185985.png";
+import nmPlayerImg from "../assets/images/wuxia_player_nm_1779612201622.png";
+import clPlayerImg from "../assets/images/wuxia_player_cl_1779612221339.png";
+import ndPlayerImg from "../assets/images/wuxia_player_nd_1779612238228.png";
+import tmPlayerImg from "../assets/images/wuxia_player_tm_1779612257555.png";
+import tyPlayerImg from "../assets/images/wuxia_player_ty_1779612276631.png";
+import tvPlayerImg from "../assets/images/wuxia_player_tv_1779612297047.png";
+import tnPlayerImg from "../assets/images/wuxia_player_tn_1779612313538.png";
+
+// Importing 10 Sect Companion images
+import slCompImg from "../assets/images/companion_sl_1779612357195.png";
+import vdCompImg from "../assets/images/companion_vd_1779612374706.png";
+import cbCompImg from "../assets/images/companion_cb_1779612392617.png";
+import nmCompImg from "../assets/images/companion_nm_1779612410880.png";
+import clCompImg from "../assets/images/companion_cl_1779612428563.png";
+import ndCompImg from "../assets/images/companion_nd_1779612449346.png";
+import tmCompImg from "../assets/images/companion_tm_1779612467084.png";
+import tyCompImg from "../assets/images/companion_ty_1779612487644.png";
+import tvCompImg from "../assets/images/companion_tv_1779612509432.png";
+import tnCompImg from "../assets/images/companion_tn_1779612527728.png";
+
+function removeCharacterBackground(img: HTMLImageElement, tolerance = 35): CanvasImageSource {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return img;
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, img.width, img.height);
+    const data = imgData.data;
+
+    const corners = [
+      { x: 2, y: 2 },
+      { x: img.width - 3, y: 2 },
+      { x: 2, y: img.height - 3 },
+      { x: img.width - 3, y: img.height - 3 }
+    ];
+
+    let bgR = 0, bgG = 0, bgB = 0;
+    let sampledCount = 0;
+    corners.forEach(p => {
+      if (p.x >= 0 && p.x < img.width && p.y >= 0 && p.y < img.height) {
+        const idx = (p.y * img.width + p.x) * 4;
+        bgR += data[idx];
+        bgG += data[idx + 1];
+        bgB += data[idx + 2];
+        sampledCount++;
+      }
+    });
+
+    if (sampledCount > 0) {
+      bgR = Math.round(bgR / sampledCount);
+      bgG = Math.round(bgG / sampledCount);
+      bgB = Math.round(bgB / sampledCount);
+    }
+
+    // Flood fill from corners instead of global replace to keep inner whites/blacks
+    const visited = new Uint8Array(img.width * img.height);
+    const queue: number[] = []; // store index
+    
+    // Push corners initially
+    corners.forEach(p => {
+      queue.push(p.y * img.width + p.x);
+    });
+
+    while(queue.length > 0) {
+      const pIdx = queue.shift()!;
+      if (visited[pIdx]) continue;
+      
+      const px = pIdx % img.width;
+      const py = Math.floor(pIdx / img.width);
+      
+      const i = pIdx * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      const diff = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
+      
+      if (diff <= tolerance) {
+        visited[pIdx] = 1;
+        data[i + 3] = 0; // erase
+        
+        // Add neighbors
+        if (px > 0 && !visited[pIdx - 1]) queue.push(pIdx - 1);
+        if (px < img.width - 1 && !visited[pIdx + 1]) queue.push(pIdx + 1);
+        if (py > 0 && !visited[pIdx - img.width]) queue.push(pIdx - img.width);
+        if (py < img.height - 1 && !visited[pIdx + img.width]) queue.push(pIdx + img.width);
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    return canvas;
+  } catch (err) {
+    return img;
+  }
+}
 
 function removeBlackBackground(img: HTMLImageElement, tolerance = 45): CanvasImageSource {
   try {
@@ -99,6 +205,7 @@ interface Props {
     { x: number; y: number; t: number; sz: number }[]
   >;
   shakeRef: MutableRefObject<number>;
+  cameraRef: MutableRefObject<{ x: number, y: number }>;
   addNotification: (text: string, color: string) => void;
 }
 
@@ -111,24 +218,42 @@ export default function GameCanvas({
   dropsRef,
   sceneryRef,
   shakeRef,
+  cameraRef,
   addNotification,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(null);
   const lastTimeRef = useRef<number>(0);
-  const cameraRef = useRef({ x: MAP_SIZE / 2, y: MAP_SIZE / 2 });
   const stateRef = useRef(gameState);
   stateRef.current = gameState;
   const pointerDownRef = useRef(false);
   const startPointerRef = useRef<{ clientX: number, clientY: number } | null>(null);
 
   const grassImgRef = useRef<HTMLImageElement | null>(null);
+  const stoneImgRef = useRef<HTMLImageElement | null>(null);
+  const grassPatternRef = useRef<CanvasPattern | null>(null);
+  const stonePatternRef = useRef<CanvasPattern | null>(null);
   const barricadeImgRef = useRef<CanvasImageSource | null>(null);
   const treeImgRef = useRef<CanvasImageSource | null>(null);
   const catapultImgRef = useRef<CanvasImageSource | null>(null);
   const flagImgRef = useRef<CanvasImageSource | null>(null);
   const lanternImgRef = useRef<CanvasImageSource | null>(null);
   const fenceImgRef = useRef<CanvasImageSource | null>(null);
+
+  const playerSpriteRef = useRef<CanvasImageSource | null>(null);
+  const mobSpriteRef = useRef<CanvasImageSource | null>(null);
+  const bossSpriteRef = useRef<CanvasImageSource | null>(null);
+
+  const playerSectSpritesRef = useRef<Record<string, CanvasImageSource | null>>({
+    sl: null, vd: null, cb: null, nm: null, cl: null,
+    nd: null, tm: null, ty: null, tv: null, tn: null
+  });
+
+  const companionSectSpritesRef = useRef<Record<string, CanvasImageSource | null>>({
+    sl: null, vd: null, cb: null, nm: null, cl: null,
+    nd: null, tm: null, ty: null, tv: null, tn: null
+  });
+
   const companionAtkTimerRef = useRef(0);
   const cocosSceneRef = useRef<cc.Node>(new cc.Node());
   const cocosParticlesRef = useRef<cc.ParticleSystem>(new cc.ParticleSystem());
@@ -145,6 +270,12 @@ export default function GameCanvas({
       grassImgRef.current = grass;
     };
     grass.src = grassImg;
+
+    const stone = new Image();
+    stone.onload = () => {
+      stoneImgRef.current = stone;
+    };
+    stone.src = stoneImg;
 
     const barricade = new Image();
     barricade.onload = () => {
@@ -181,6 +312,52 @@ export default function GameCanvas({
       fenceImgRef.current = removeBlackBackground(fence, 55);
     };
     fence.src = fenceImg;
+
+    const pSprite = new Image();
+    pSprite.onload = () => {
+      playerSpriteRef.current = removeCharacterBackground(pSprite, 45);
+    };
+    pSprite.src = wuxiaPlayerImg;
+
+    const mSprite = new Image();
+    mSprite.onload = () => {
+      mobSpriteRef.current = removeCharacterBackground(mSprite, 45);
+    };
+    mSprite.src = wuxiaMobImg;
+
+    const bSprite = new Image();
+    bSprite.onload = () => {
+      bossSpriteRef.current = removeCharacterBackground(bSprite, 45);
+    };
+    bSprite.src = wuxiaBossImg;
+
+    // Load 10 Sect Players
+    const sectPlayerImgs: Record<string, string> = {
+      sl: slPlayerImg, vd: vdPlayerImg, cb: cbPlayerImg, nm: nmPlayerImg, cl: clPlayerImg,
+      nd: ndPlayerImg, tm: tmPlayerImg, ty: tyPlayerImg, tv: tvPlayerImg, tn: tnPlayerImg
+    };
+
+    Object.entries(sectPlayerImgs).forEach(([sect, src]) => {
+      const img = new Image();
+      img.onload = () => {
+        playerSectSpritesRef.current[sect] = removeCharacterBackground(img, 45);
+      };
+      img.src = src;
+    });
+
+    // Load 10 Sect Companions
+    const sectCompImgs: Record<string, string> = {
+      sl: slCompImg, vd: vdCompImg, cb: cbCompImg, nm: nmCompImg, cl: clCompImg,
+      nd: ndCompImg, tm: tmCompImg, ty: tyCompImg, tv: tvCompImg, tn: tnCompImg
+    };
+
+    Object.entries(sectCompImgs).forEach(([sect, src]) => {
+      const img = new Image();
+      img.onload = () => {
+        companionSectSpritesRef.current[sect] = removeCharacterBackground(img, 45);
+      };
+      img.src = src;
+    });
   }, []);
 
   const setStateAsync = (updater: (prev: GameState | null) => GameState | null) => {
@@ -263,7 +440,7 @@ export default function GameCanvas({
     if (hasCloak) {
       const wingFlap = Math.sin(time * 0.008) * sz * 0.4;
       ctx.save();
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = 5;
       
       let mainWingColor = 'rgba(235, 95, 175, 0.95)';
       let fillWingColor = 'rgba(235, 95, 175, 0.18)';
@@ -334,83 +511,97 @@ export default function GameCanvas({
     ctx.ellipse(x, y + sz, sz * 0.8, sz * 0.3, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Legs
-    let legPhase = 0;
-    if (moving) legPhase = Math.sin(time * 0.015) * sz * 0.4;
-    ctx.fillStyle = "#111";
-    ctx.fillRect(x - sz * 0.4 + legPhase, y + sz * 0.4, sz * 0.3, sz * 0.6);
-    ctx.fillRect(x + sz * 0.1 - legPhase, y + sz * 0.4, sz * 0.3, sz * 0.6);
-
-    // Body (Robe)
     let bodyBounce = moving ? Math.abs(Math.sin(time * 0.015)) * sz * 0.1 : 0;
     let by = y - bodyBounce;
 
-    ctx.fillStyle = c;
-    ctx.beginPath();
-    ctx.moveTo(x - sz * 0.8, by + sz * 0.8);
-    ctx.lineTo(x + sz * 0.8, by + sz * 0.8);
-    ctx.lineTo(x + sz * 0.6, by - sz * 0.2);
-    ctx.lineTo(x - sz * 0.6, by - sz * 0.2);
-    ctx.fill();
-
-    // Custom garments decorations
+    let spriteImg: CanvasImageSource | null = null;
     if (sectId) {
-      if (sectId === 'sl') {
-        ctx.strokeStyle = '#d35400';
-        ctx.lineWidth = 2;
+      spriteImg = playerSectSpritesRef.current[sectId] || playerSpriteRef.current;
+    } else if (isBoss) {
+      spriteImg = bossSpriteRef.current;
+    } else {
+      spriteImg = mobSpriteRef.current;
+    }
+
+    if (spriteImg) {
+      ctx.save();
+      const spriteW = sz * 2.8;
+      const spriteH = sz * 2.8;
+      
+      ctx.translate(x, y + sz * 0.3 - bodyBounce);
+      ctx.scale(facing, 1);
+      
+      ctx.drawImage(spriteImg, -spriteW / 2, -spriteH * 0.85, spriteW, spriteH);
+      
+      if (sectId) {
+        ctx.globalCompositeOperation = "color";
+        ctx.fillStyle = c;
+        ctx.globalAlpha = 0.25;
+        ctx.drawImage(spriteImg, -spriteW / 2, -spriteH * 0.85, spriteW, spriteH);
+        ctx.globalAlpha = 1.0;
+        ctx.globalCompositeOperation = "source-over";
+      }
+      
+      ctx.restore();
+    } else {
+      // Fallback Legs
+      let legPhase = 0;
+      if (moving) legPhase = Math.sin(time * 0.015) * sz * 0.4;
+      ctx.fillStyle = "#111";
+      ctx.fillRect(x - sz * 0.4 + legPhase, y + sz * 0.4, sz * 0.3, sz * 0.6);
+      ctx.fillRect(x + sz * 0.1 - legPhase, y + sz * 0.4, sz * 0.3, sz * 0.6);
+
+      // Fallback Body
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(x - sz * 0.8, by + sz * 0.8);
+      ctx.lineTo(x + sz * 0.8, by + sz * 0.8);
+      ctx.lineTo(x + sz * 0.6, by - sz * 0.2);
+      ctx.lineTo(x - sz * 0.6, by - sz * 0.2);
+      ctx.fill();
+
+      // Fallback Head
+      if (sectId) {
+        ctx.fillStyle = "#fce0cf";
         ctx.beginPath();
-        ctx.arc(x, by + sz * 0.25, sz * 0.35, 0, Math.PI, false);
-        ctx.stroke();
-        ctx.fillStyle = '#f1c40f';
-        ctx.fillRect(x - sz * 0.2, by + sz * 0.2, sz * 0.4, sz * 0.6);
-      } else if (sectId === 'vd') {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(x, by + sz * 0.3, sz * 0.25, 0, Math.PI * 2);
+        ctx.arc(x, by - sz * 0.5, sz * 0.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = isBoss ? "#8e44ad" : "#1a1a1a";
         ctx.beginPath();
-        ctx.arc(x, by + sz * 0.3, sz * 0.25, Math.PI / 2, Math.PI * 1.5);
-        ctx.fill();
-      } else if (sectId === 'nm') {
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(x - sz * 0.5, by + sz * 0.3);
-        ctx.lineTo(x + sz * 0.5, by + sz * 0.3);
-        ctx.lineTo(x, by + sz * 0.8);
-        ctx.closePath();
+        ctx.arc(x, by - sz * 0.6, sz * 0.55, Math.PI * 0.8, Math.PI * 2.2);
         ctx.fill();
       } else {
-        ctx.strokeStyle = '#f1c40f';
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = isBoss ? "#b71c1c" : c;
         ctx.beginPath();
-        ctx.moveTo(x - sz * 0.5, by + sz * 0.5);
-        ctx.lineTo(x + sz * 0.5, by + sz * 0.5);
-        ctx.stroke();
+        ctx.arc(x, by - sz * 0.5, sz * 0.55, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    // Head
-    ctx.fillStyle = "#f5cba7";
-    ctx.beginPath();
-    ctx.arc(x, by - sz * 0.5, sz * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Hair
-    ctx.fillStyle = isBoss ? "#8e44ad" : "#222";
-    ctx.beginPath();
-    ctx.arc(x, by - sz * 0.6, sz * 0.55, Math.PI, Math.PI * 2);
-    ctx.fill();
-
     // Weapon Animation (Arm and Physical features)
     ctx.save();
-    let armPhase = moving ? Math.sin(time * 0.015) * sz * 0.5 : 0;
-    const hx = x + facing * sz * 0.5;
+    let armPhase = moving ? Math.sin(time * 0.015) * sz * 0.4 : 0;
+    const hx = x + facing * sz * 0.6;
     const hy = by + sz * 0.15;
     const wx = x + facing * sz * 1.5;
     const wy = by - sz * 0.3 + armPhase;
     
+    // Draw back hand
+    ctx.fillStyle = sectId ? "#fce0cf" : (isBoss ? "#b71c1c" : c);
+    ctx.beginPath();
+    ctx.arc(hx, hy + sz * 0.2, sz * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    
     if (sectId) {
+      // Draw arms / sleeves based on sect
+      ctx.strokeStyle = c;
+      ctx.lineWidth = sz * 0.4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x + facing * sz * 0.3, by + sz * 0.2);
+      ctx.lineTo(hx, hy + sz * 0.2);
+      ctx.stroke();
+
       if (sectId === 'sl') {
         const spinA = (time * 0.005) % (Math.PI * 2);
         ctx.translate(wx, wy);
@@ -429,144 +620,128 @@ export default function GameCanvas({
         ctx.rotate(-spinA);
         ctx.translate(-wx, -wy);
       } 
-      else if (sectId === 'vd') {
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = '#3498db';
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#3498db';
+      else if (sectId === 'vd' || sectId === 'cl' || sectId === 'nm' || sectId === 'ty') {
+        // Swordsmen sects
+        const swordColor = sectId === 'vd' ? '#3498db' : (sectId === 'nm' ? '#e91e63' : (sectId === 'cl' ? '#f1c40f' : '#00bcd4'));
+        
+        // Draw thicker outer glowing qi aura
+        ctx.save();
+        ctx.lineWidth = 5.5;
+        ctx.strokeStyle = swordColor;
+        ctx.globalAlpha = 0.45;
         ctx.beginPath();
-        ctx.moveTo(hx, hy);
+        ctx.moveTo(hx, hy + sz * 0.2);
         ctx.lineTo(wx, wy - sz * 0.5);
         ctx.stroke();
-        ctx.strokeStyle = '#fff';
-        ctx.beginPath();
-        ctx.moveTo(hx + facing * 4, hy - 4);
-        ctx.lineTo(hx + facing * 8, hy + 4);
-        ctx.stroke();
+        ctx.restore();
+        
+        // Draw solid high-intensity core
+        ctx.lineWidth = 2.0;
         ctx.strokeStyle = '#ffffff';
         ctx.beginPath();
-        ctx.moveTo(x - facing * sz * 0.5, hy);
-        ctx.lineTo(x - facing * sz * 1.2, hy - sz);
+        ctx.moveTo(hx, hy + sz * 0.2);
+        ctx.lineTo(wx, wy - sz * 0.5);
         ctx.stroke();
-      } 
-      else if (sectId === 'cb') {
-        ctx.strokeStyle = '#27ae60';
-        ctx.lineWidth = 4.5;
+        
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(hx, hy);
-        ctx.lineTo(wx + facing * sz * 0.5, wy - sz * 0.4);
+        ctx.moveTo(hx + facing * 4, hy + sz * 0.2 - 4);
+        ctx.lineTo(hx + facing * 8, hy + sz * 0.2 + 4);
         ctx.stroke();
-        ctx.fillStyle = '#2ecc71';
-        ctx.beginPath();
-        ctx.arc(hx + (wx - hx) * 0.5, hy + (wy - hy) * 0.5, 3.5, 0, Math.PI * 2);
-        ctx.arc(wx, wy, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      } 
-      else if (sectId === 'nm') {
-        ctx.strokeStyle = '#e91e63';
-        ctx.lineWidth = 2.5;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#e91e63';
-        ctx.beginPath();
-        ctx.moveTo(hx, hy);
-        ctx.lineTo(wx, wy - sz * 0.4);
-        ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(wx, wy - sz * 0.4, 3, 0, Math.PI * 2);
-        ctx.fill();
-      } 
-      else if (sectId === 'cl') {
-        ctx.strokeStyle = '#f39c12';
+        
+        ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(hx, hy);
-        ctx.lineTo(wx, wy - sz * 0.6);
+        ctx.moveTo(x - facing * sz * 0.5, hy + sz * 0.2);
+        ctx.lineTo(x - facing * sz * 1.2, hy - sz * 0.8);
         ctx.stroke();
-        if (Math.random() < 0.4) {
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(hx, hy);
-          ctx.lineTo(hx + (wx - hx) * 0.5 + (Math.random() - 0.5) * 8, hy + (wy - hy) * 0.5 + (Math.random() - 0.5) * 8);
-          ctx.lineTo(wx, wy - sz * 0.6);
-          ctx.stroke();
-        }
       } 
-      else if (sectId === 'nd') {
-        ctx.strokeStyle = '#9b59b6';
-        ctx.lineWidth = 4;
+      else if (sectId === 'cb' || sectId === 'nd') {
+        // Staff / Whip
+        const wColor = sectId === 'cb' ? '#27ae60' : '#9b59b6';
+        ctx.strokeStyle = wColor;
+        ctx.lineWidth = 4.5;
+        ctx.lineCap = "round";
         ctx.beginPath();
-        ctx.moveTo(hx, hy);
-        ctx.quadraticCurveTo(wx, wy, wx + facing * sz * 0.5, wy - sz * 0.6);
+        ctx.moveTo(hx, hy + sz * 0.2);
+        if (sectId === 'nd') {
+           ctx.quadraticCurveTo(wx, wy + sz, wx + facing * sz * 0.8, wy - sz * 0.6);
+        } else {
+           ctx.lineTo(wx + facing * sz * 0.5, wy - sz * 0.4);
+        }
         ctx.stroke();
-        ctx.fillStyle = '#2ecc71';
+        
+        ctx.fillStyle = sectId === 'cb' ? '#2ecc71' : '#8e44ad';
         ctx.beginPath();
-        ctx.arc(wx + facing * sz * 0.5, wy - sz * 0.6, 2.5, 0, Math.PI * 2);
+        ctx.arc(wx + (sectId === 'cb' ? 0 : facing * sz * 0.8), wy - (sectId === 'cb' ? 0 : sz * 0.6), 4, 0, Math.PI * 2);
         ctx.fill();
       } 
       else if (sectId === 'tm') {
+        // Hidden weapons / Bow
         ctx.fillStyle = '#7f8c8d';
-        ctx.fillRect(hx, hy - 3, sz * 0.8 * facing, 6);
+        ctx.fillRect(hx, hy + sz * 0.2 - 3, sz * 1.2 * facing, 6);
         ctx.fillStyle = '#8a2be2';
-        ctx.fillRect(hx + sz * 0.5 * facing, hy - sz * 0.4, 3 * facing, sz * 0.8);
+        ctx.fillRect(hx + sz * 0.8 * facing, hy + sz * 0.2 - sz * 0.6, 4 * facing, sz * 1.2);
       } 
-      else if (sectId === 'ty') {
-        ctx.strokeStyle = '#00bcd4';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(wx, wy, sz * 0.4, Math.PI * 0.5, Math.PI * 1.5, facing > 0);
-        ctx.stroke();
-      } 
-      else if (sectId === 'tv') {
-        ctx.strokeStyle = '#f44336';
+      else if (sectId === 'tv' || sectId === 'tn') {
+        // Spear / Heavy Halberd
+        const wColor = sectId === 'tv' ? '#f44336' : '#d35400';
+        ctx.strokeStyle = wColor;
         ctx.lineWidth = 4;
-        const sLength = sz * 2.8;
+        const sLength = sz * 3.2;
         const txPointX = hx + facing * sLength;
-        const txPointY = hy - sz * 0.6;
+        const txPointY = hy + sz * 0.2 - sz * 0.8;
+        
         ctx.beginPath();
-        ctx.moveTo(hx, hy);
+        ctx.moveTo(hx - facing * sz, hy + sz * 0.2 + sz * 0.4);
         ctx.lineTo(txPointX, txPointY);
         ctx.stroke();
-        ctx.fillStyle = '#f44336';
+        
+        ctx.fillStyle = wColor;
         ctx.beginPath();
-        ctx.arc(txPointX - facing * sz * 0.3, txPointY + sz * 0.1, sz * 0.15, 0, Math.PI * 2);
+        ctx.arc(txPointX - facing * sz * 0.3, txPointY + sz * 0.1, sz * 0.2, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#d35400';
+        
+        ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.moveTo(txPointX, txPointY);
-        ctx.lineTo(txPointX - facing * sz * 0.4, txPointY - sz * 0.1);
-        ctx.lineTo(txPointX - facing * sz * 0.4, txPointY + sz * 0.1);
+        ctx.lineTo(txPointX - facing * sz * 0.6, txPointY - sz * 0.2);
+        ctx.lineTo(txPointX - facing * sz * 0.6, txPointY + sz * 0.2);
         ctx.closePath();
         ctx.fill();
-      } 
-      else if (sectId === 'tn') {
-        ctx.strokeStyle = '#d35400';
-        ctx.lineWidth = 3;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#d35400';
-        ctx.beginPath();
-        ctx.moveTo(hx, hy);
-        ctx.lineTo(wx, wy - sz * 0.3);
-        ctx.stroke();
-        if (Math.random() < 0.6) {
-          ctx.fillStyle = '#e67e22';
-          ctx.beginPath();
-          ctx.moveTo(wx, wy - sz * 0.3);
-          ctx.lineTo(wx + (Math.random() - 0.5) * 6, wy - sz * 0.6 - Math.random() * 8);
-          ctx.lineTo(wx - facing * 4, wy - sz * 0.3);
-          ctx.closePath();
-          ctx.fill();
-        }
       }
     } else {
-      ctx.strokeStyle = "#aaa";
-      ctx.lineWidth = isBoss ? 5 : 3;
+      // Monster claws / weapons
+      ctx.strokeStyle = "#444";
+      ctx.lineWidth = isBoss ? 6 : 4;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(hx, hy);
+      ctx.moveTo(x + facing * sz * 0.4, by + sz * 0.2);
       ctx.lineTo(wx, wy);
       ctx.stroke();
+      
+      // Giant spiked club for bosses
+      if (isBoss) {
+        ctx.fillStyle = "#8d6e63";
+        ctx.beginPath();
+        ctx.ellipse(wx, wy - sz * 0.4, sz * 0.6, sz * 1.0, facing > 0 ? 0.2 : -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        for(let i=0; i<3; i++) {
+           ctx.beginPath();
+           ctx.arc(wx + (Math.random()-0.5)*sz*0.6, wy - sz*0.4 + (Math.random()-0.5)*sz*0.8, sz*0.15, 0, Math.PI*2);
+           ctx.fill();
+        }
+      }
     }
+    
+    // Front hand over weapon
+    ctx.fillStyle = sectId ? "#fce0cf" : (isBoss ? "#b71c1c" : c);
+    ctx.beginPath();
+    ctx.arc(hx + facing * sz * 0.2, hy + sz * 0.2, sz * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    
     ctx.restore();
   };
 
@@ -656,6 +831,13 @@ export default function GameCanvas({
     addNotification(`⚔️ KHAI CHIẾN ${actualSubBossCount} HỘ PHÁP THỦ LĨNH!`, stage > 20 ? "#d35400" : "#16a085");
   };
 
+  const WUXIA_BOSS_NAMES = [
+    "Kiều Phong", "Dương Quá", "Lệnh Hồ Xung", "Trương Vô Kỵ", 
+    "Đông Phương Bất Bại", "Hoàng Dược Sư", "Âu Dương Phong", 
+    "Hồng Thất Công", "Đoàn Trí Hưng", "Quách Tĩnh", "Cô Long", 
+    "Độc Cô Cầu Bại", "Nhậm Ngã Hành", "Vô Nhai Tử", "Thiên Sơn Đồng Lão"
+  ];
+
   const spawnFinalBosses = (count: number, stage: number) => {
     const isLateGame = stage > 20;
     const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.35) * (isLateGame ? 1.6 : 1.0);
@@ -672,10 +854,12 @@ export default function GameCanvas({
       const angle = (Math.PI * 2 / count) * i;
       const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
       const prefix = nameElPrefixes[el];
+      const randomWuxiaName = WUXIA_BOSS_NAMES[Math.floor(Math.random() * WUXIA_BOSS_NAMES.length)];
+      
       newBosses.push({
         id: Math.random(),
         isBoss: true,
-        name: isLateGame ? `${prefix} 🔥 VÔ THỰNG DIÊM VƯƠNG TRÙM CUỐI` : `${prefix} Trùm Cuối Đại Sứ (Boss ${i + 1})`,
+        name: isLateGame ? `${prefix} 🔥 TÔNG TƯ THẦN - ${randomWuxiaName}` : `${prefix} ${randomWuxiaName}`,
         x: p.x + Math.cos(angle) * 350,
         y: p.y + Math.sin(angle) * 350,
         hp: hpBase,
@@ -1185,11 +1369,14 @@ export default function GameCanvas({
       }
     }
 
-    textsRef.current.forEach((t, index) => {
+    for (let index = textsRef.current.length - 1; index >= 0; index--) {
+      const t = textsRef.current[index];
       t.y -= 40 * dt;
       t.life -= dt;
-      if (t.life <= 0) textsRef.current.splice(index, 1);
-    });
+      if (t.life <= 0) {
+        textsRef.current.splice(index, 1);
+      }
+    }
 
     if (shakeRef.current > 0) shakeRef.current -= dt * 10;
   };
@@ -1592,8 +1779,9 @@ export default function GameCanvas({
   const render = (time: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ctx.clearRect(0,0, canvas.width, canvas.height);
 
     const p = stateRef.current.player;
     const zoom = canvas.width < 768 ? 0.82 : 0.94;
@@ -1634,37 +1822,65 @@ export default function GameCanvas({
     ctx.fillStyle = biomeMapFill;
     ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
 
-    if (grassImgRef.current) {
-      try {
-        const pattern = ctx.createPattern(grassImgRef.current, "repeat");
-        if (pattern) {
-          try {
-            const matrix = new DOMMatrix();
-            matrix.scaleSelf(0.22, 0.22);
-            pattern.setTransform(matrix);
-          } catch (e) {}
-          ctx.fillStyle = pattern;
-          ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-
-          // Apply beautiful watercolor aesthetic composite tint based on biome cycle (using soft overlays)
-          if (cycle === 0) {
-            // Forest - Lush Deep Jade Green
-            ctx.fillStyle = "rgba(10, 40, 15, 0.25)";
-          } else if (cycle === 1) {
-            // Desert - Golden Dun
-            ctx.fillStyle = "rgba(200, 120, 20, 0.22)";
-          } else if (cycle === 2) {
-            // Mountain - Ice Frost Blue
-            ctx.fillStyle = "rgba(140, 180, 220, 0.22)";
-          } else {
-            // Plains - Soft Olive Ink
-            ctx.fillStyle = "rgba(40, 60, 40, 0.18)";
+    const isStone = (cycle === 1 || cycle === 2);
+    let pattern: CanvasPattern | null = null;
+    if (isStone) {
+      if (stonePatternRef.current) {
+        pattern = stonePatternRef.current;
+      } else if (stoneImgRef.current) {
+        try {
+          const pat = ctx.createPattern(stoneImgRef.current, "repeat");
+          if (pat) {
+            try {
+              const matrix = new DOMMatrix();
+              matrix.scaleSelf(0.22, 0.22);
+              pat.setTransform(matrix);
+            } catch (e) {}
+            stonePatternRef.current = pat;
+            pattern = pat;
           }
-          ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-        }
-      } catch (err) {
-        // Fallback already handled
+        } catch (err) {}
       }
+    } else {
+      if (grassPatternRef.current) {
+        pattern = grassPatternRef.current;
+      } else if (grassImgRef.current) {
+        try {
+          const pat = ctx.createPattern(grassImgRef.current, "repeat");
+          if (pat) {
+            try {
+              const matrix = new DOMMatrix();
+              matrix.scaleSelf(0.22, 0.22);
+              pat.setTransform(matrix);
+            } catch (e) {}
+            grassPatternRef.current = pat;
+            pattern = pat;
+          }
+        } catch (err) {}
+      }
+    }
+
+    if (pattern) {
+      try {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+
+        // Apply beautiful watercolor aesthetic composite tint based on biome cycle (using soft overlays)
+        if (cycle === 0) {
+          // Forest - Lush Deep Jade Green
+          ctx.fillStyle = "rgba(10, 40, 15, 0.25)";
+        } else if (cycle === 1) {
+          // Desert - Golden Dun
+          ctx.fillStyle = "rgba(200, 120, 20, 0.22)";
+        } else if (cycle === 2) {
+          // Mountain - Ice Frost Blue
+          ctx.fillStyle = "rgba(140, 180, 220, 0.22)";
+        } else {
+          // Plains - Soft Olive Ink
+          ctx.fillStyle = "rgba(40, 60, 40, 0.18)";
+        }
+        ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+      } catch (err) {}
     }
     ctx.restore();
 
@@ -2044,21 +2260,8 @@ export default function GameCanvas({
         const height = par.size * 5;
         const width = par.size;
         
-        const grad = ctx.createLinearGradient(px, py - height, px, py);
-        grad.addColorStop(0, 'transparent');
-        grad.addColorStop(0.5, par.color);
-        grad.addColorStop(1, '#ffffff');
-        
-        ctx.fillStyle = grad;
-        ctx.fillRect(px - width/2, py - height, width, height);
-        
-        // Ground glow
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.ellipse(px, py, width * 1.5, width * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (par.type === 'sword') {
-        // Raining swords
+          } else if (par.type === 'sword') {
+        // Raining swords (optimized fast vector glow)
         ctx.translate(px, py);
         if (par.rotation) ctx.rotate(par.rotation);
         
@@ -2072,49 +2275,77 @@ export default function GameCanvas({
         ctx.lineTo(par.size / 4, par.size);
         ctx.fill();
         
-        // Glow
-        ctx.shadowColor = par.color;
-        ctx.shadowBlur = 10;
+        // Fast dual-blend neon glow replacing shadowBlur
+        ctx.fillStyle = par.color;
+        ctx.globalAlpha = 0.25 * alpha;
+        ctx.fillRect(-par.size / 3, -par.size * 1.9, par.size * 0.66, par.size * 3.8);
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-par.size/6, -par.size * 1.8, par.size/3, par.size * 3.5);
-        ctx.shadowBlur = 0;
+        ctx.fillRect(-par.size / 6, -par.size * 1.8, par.size / 3, par.size * 3.5);
         
         if (par.rotation) ctx.rotate(-par.rotation);
         ctx.translate(-px, -py);
       } else if (par.type === 'trail') {
+        // Double-circle aura simulation (100x faster than shadowBlur)
         ctx.fillStyle = par.color;
-        ctx.shadowColor = par.color;
-        ctx.shadowBlur = Math.max(1, par.size);
+        ctx.globalAlpha = 0.3 * alpha;
+        ctx.beginPath();
+        ctx.arc(px, py, par.size * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
         ctx.arc(px, py, par.size, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0;
       } else if (par.type === 'beam') {
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(1, par.size * (par.life / 0.8) * 1.8);
-        ctx.shadowColor = par.color;
-        ctx.shadowBlur = 20;
+        // Clean double-layered glowing beam
+        ctx.strokeStyle = par.color;
+        ctx.lineWidth = Math.max(3, par.size * (par.life / 0.8) * 3.5);
+        ctx.globalAlpha = 0.25 * alpha;
         ctx.beginPath();
         ctx.moveTo(px - 1000, py);
         ctx.lineTo(px + 1000, py);
         ctx.stroke();
-        ctx.shadowBlur = 0;
-      } else if (par.type === 'lightning') {
+
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5 + Math.random() * 3;
-        ctx.shadowColor = par.color;
-        ctx.shadowBlur = 15;
+        ctx.lineWidth = Math.max(1, par.size * (par.life / 0.8) * 1.1);
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
-        ctx.moveTo(px, py - 500);
+        ctx.moveTo(px - 1000, py);
+        ctx.lineTo(px + 1000, py);
+        ctx.stroke();
+      } else if (par.type === 'lightning') {
+        // Collect coordinates once for double-pass consistent coordinates without random shifts
+        const pts: { x: number; y: number }[] = [{ x: px, y: py - 500 }];
         let cyy = py - 500;
         let cxx = px;
         while (cyy < py) {
           cyy += 30 + Math.random() * 40;
           cxx += (Math.random() - 0.5) * 50;
-          ctx.lineTo(cxx, cyy);
+          pts.push({ x: cxx, y: cyy });
+        }
+
+        // Draw outer thick color aura
+        ctx.strokeStyle = par.color;
+        ctx.lineWidth = 5 + Math.random() * 3;
+        ctx.globalAlpha = 0.35 * alpha;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(pts[i].x, pts[i].y);
         }
         ctx.stroke();
-        ctx.shadowBlur = 0;
+
+        // Draw inner intense hot-white center core
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5 + Math.random() * 1.5;
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) {
+          ctx.lineTo(pts[i].x, pts[i].y);
+        }
+        ctx.stroke();
       } else {
         // Default dot
         ctx.fillStyle = par.color;
@@ -2286,6 +2517,20 @@ export default function GameCanvas({
         time,
       );
 
+      // Entity Name if Boss
+      if (e.isBoss && e.name) {
+        ctx.fillStyle = e.isSubBoss ? "#e67e22" : "#9b59b6";
+        ctx.font = "bold 13px 'Courier New', Courier, monospace";
+        ctx.textAlign = "center";
+        
+        ctx.shadowColor = "black";
+        ctx.shadowBlur = 4;
+        ctx.lineWidth = 2;
+        ctx.strokeText(e.name, ex, ey - e.size - 25);
+        ctx.shadowBlur = 0;
+        ctx.fillText(e.name, ex, ey - e.size - 25);
+      }
+
       // HP Bar
       ctx.fillStyle = "#000";
       ctx.fillRect(ex - 20, ey - e.size - 15, 40, 5);
@@ -2317,20 +2562,26 @@ export default function GameCanvas({
       const px = p.x - cx;
       const py = p.y - cy;
 
-      // Banner aura passive battlefield design
+      // Banner aura passive battlefield design (Highly optimized with nested strokes)
       if (p.equipment.banner !== null) {
         ctx.save();
-        ctx.strokeStyle = "rgba(243, 156, 18, 0.5)"; // Golden standard flame aura
-        ctx.lineWidth = 3.5;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = "#f39c12";
+        // Thick low-opacity outer glow ring
+        ctx.strokeStyle = "rgba(243, 156, 18, 0.22)"; 
+        ctx.lineWidth = 12.0;
+        ctx.beginPath();
+        ctx.ellipse(px, py + p.radius, 160, 64, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Solid golden inner ring
+        ctx.strokeStyle = "rgba(243, 156, 18, 0.85)";
+        ctx.lineWidth = 2.8;
         ctx.beginPath();
         ctx.ellipse(px, py + p.radius, 160, 64, 0, 0, Math.PI * 2);
         ctx.stroke();
 
         ctx.translate(px, py + p.radius);
-        ctx.strokeStyle = "rgba(243, 156, 18, 0.35)";
-        ctx.lineWidth = 2.0;
+        ctx.strokeStyle = "rgba(243, 156, 18, 0.4)";
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.ellipse(0, 0, 160, 64, 0, 0, Math.PI * 2);
         ctx.stroke();
@@ -2380,16 +2631,25 @@ export default function GameCanvas({
         ctx.ellipse(petX, petY + 14, 12, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Draw mascot emoji!
+        // Draw mascot emoji or custom sect-specific sprite!
         ctx.save();
-        ctx.font = "18px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(comp.emoji || "🐯", petX, petY);
+        const compSectId = getSectIdFromColor(p.color);
+        const compSprite = compSectId ? companionSectSpritesRef.current[compSectId] : null;
+        if (compSprite) {
+          const compW = 28;
+          const compH = 28;
+          ctx.drawImage(compSprite, petX - compW / 2, petY - compH / 2, compW, compH);
+        } else {
+          ctx.font = "18px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(comp.emoji || "🐯", petX, petY);
+        }
         
         // Render companion level above
         ctx.font = "bold 9px font-sans";
         ctx.fillStyle = "#f39c12";
-        ctx.fillText(`Lg. ${comp.level || 1}`, petX, petY - 14);
+        ctx.textAlign = "center";
+        ctx.fillText(`Lg. ${comp.level || 1}`, petX, petY - 16);
         ctx.restore();
       }
     }

@@ -9,20 +9,20 @@ interface Props {
   gameState: GameState;
   setGameState: Dispatch<SetStateAction<GameState | null>>;
   addNotification: (text: string, color: string) => void;
+  geminiEncounters?: any[] | null;
 }
 
 interface RogueliteOption {
   name: string;
   desc: string;
   icon: any;
+  rarity?: string;
   effect: (gs: GameState) => GameState;
-  isLoading?: boolean;
 }
 
-export default function StageClearOverlay({ gameState, setGameState, addNotification }: Props) {
+export default function StageClearOverlay({ gameState, setGameState, addNotification, geminiEncounters }: Props) {
   const [options, setOptions] = useState<RogueliteOption[]>([]);
   const [timeLeft, setTimeLeft] = useState(15);
-  const [geminiLoading, setGeminiLoading] = useState(false);
 
   const priceMultiplier = getItemCostMultiplier(gameState.stage);
   const costLife = Math.floor(500 * priceMultiplier);
@@ -30,128 +30,50 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
 
   useEffect(() => {
     const pool: RogueliteOption[] = [
-      { 
-        name: 'Tham Lam', 
-        desc: 'Tăng 30% Vàng nhận được', 
-        icon: Coins,
-        effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, rlGold: gs.buffs.rlGold + 0.3 } })
-      },
-      { 
-        name: 'Khổ Tu', 
-        desc: 'Tăng 30% EXP nhận được', 
-        icon: TrendingUp,
-        effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, rlExp: gs.buffs.rlExp + 0.3 } })
-      },
-      { 
-        name: 'Sát Thủ', 
-        desc: 'Hạ gục Boss ngay nếu HP dưới 15%', 
-        icon: Skull,
-        effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, rlExec: 0.15 } })
-      },
-      { 
-        name: 'Cuồng Bạo', 
-        desc: 'Giảm 50% HP quái ải sau, x2 Vàng', 
-        icon: Zap,
-        effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, hpMult: gs.buffs.hpMult * 0.5, rlGold: gs.buffs.rlGold + 1 } })
-      },
-      {
-        name: 'Phúc Tinh',
-        desc: 'Tăng 20% sát thương',
-        icon: Sparkles,
-        effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, dmgMult: gs.buffs.dmgMult + 0.2 } })
-      }
+      { name: 'Tham Lam', desc: 'Tăng 30% Vàng nhận được', icon: Coins, effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, rlGold: gs.buffs.rlGold + 0.3 } }) },
+      { name: 'Khổ Tu', desc: 'Tăng 30% EXP nhận được', icon: TrendingUp, effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, rlExp: gs.buffs.rlExp + 0.3 } }) },
+      { name: 'Sát Thủ', desc: 'Hạ gục Boss ngay nếu HP dưới 15%', icon: Skull, effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, rlExec: 0.15 } }) },
+      { name: 'Cuồng Bạo', desc: 'Giảm 50% HP quái ải sau, x2 Vàng', icon: Zap, effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, hpMult: gs.buffs.hpMult * 0.5, rlGold: gs.buffs.rlGold + 1 } }) },
+      { name: 'Phúc Tinh', desc: 'Tăng 20% sát thương', icon: Sparkles, effect: (gs) => ({ ...gs, buffs: { ...gs.buffs, dmgMult: gs.buffs.dmgMult + 0.2 } }) }
     ];
 
-    const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, 2);
-    
-    // Add Placeholder for Gemini Encounter in the middle
-    shuffled.splice(1, 0, {
-      name: 'Kỳ Ngộ Giang Hồ...',
-      desc: 'Đang cầu viện thiên y...',
-      icon: Loader2,
-      isLoading: true,
-      effect: (gs) => gs
-    });
-
-    setOptions(shuffled);
-
-    // Call Gemini API
-    const fetchGeminiEncounter = async () => {
-      setGeminiLoading(true);
-      try {
-        const payload = {
-          gameState: {
-            stage: gameState.stage,
-            gold: gameState.gold,
-            player: {
-              hp: gameState.player.hp,
-              maxHp: gameState.player.maxHp,
-              sectId: gameState.player.sectId || 'Vô Danh'
+    if (geminiEncounters && geminiEncounters.length === 3) {
+      const gOpts = geminiEncounters.map(ai => {
+        return {
+          name: ai.name || 'Kỳ Ngộ',
+          desc: ai.event_text || '',
+          icon: Sparkles,
+          rarity: ai.rarity?.toLowerCase() || 'normal',
+          effect: (gs: GameState) => {
+            let nextHp = gs.player.hp;
+            let nextGold = gs.gold;
+            if (ai.stat_changes) {
+              if (ai.stat_changes.hp) {
+                  nextHp = Math.min(gs.player.maxHp, Math.max(1, nextHp + ai.stat_changes.hp));
+              }
+              if (ai.stat_changes.gold) {
+                  nextGold = Math.max(0, nextGold + ai.stat_changes.gold);
+              }
             }
+            return {
+              ...gs,
+              gold: nextGold,
+              player: {
+                ...gs.player,
+                hp: nextHp
+              }
+            };
           }
         };
-
-        const res = await fetch('/api/encounter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) throw new Error("API call failed");
-        
-        const data = await res.json();
-        
-        // Transform the AI response into a RogueliteOption
-        setOptions(prev => {
-          const newOpts = [...prev];
-          newOpts[1] = {
-            name: 'Thiên Cơ Kỳ Ngộ',
-            desc: data.event_text || "Một thế lực thần bí giúp đỡ bạn.",
-            icon: Sparkles,
-            effect: (gs) => {
-              let nextHp = gs.player.hp;
-              let nextGold = gs.gold;
-
-              if (data.stat_changes) {
-                if (data.stat_changes.hp) {
-                   nextHp = Math.min(gs.player.maxHp, Math.max(1, nextHp + data.stat_changes.hp));
-                }
-                if (data.stat_changes.gold) {
-                   nextGold = Math.max(0, nextGold + data.stat_changes.gold);
-                }
-              }
-
-              return {
-                ...gs,
-                gold: nextGold,
-                player: {
-                  ...gs.player,
-                  hp: nextHp
-                }
-              };
-            }
-          };
-          return newOpts;
-        });
-
-      } catch (err) {
-        console.error("Failed to load Gemini encounter:", err);
-        // Fallback if AI fails
-        setOptions(prev => {
-          const newOpts = [...prev];
-          newOpts[1] = pool.find(p => !newOpts.map(n=>n.name).includes(p.name)) || pool[0];
-          return newOpts;
-        });
-      } finally {
-        setGeminiLoading(false);
-      }
-    };
-
-    fetchGeminiEncounter();
-  }, []);
+      });
+      setOptions(gOpts);
+    } else {
+      const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+      setOptions(shuffled);
+    }
+  }, [geminiEncounters]);
 
   const pickOption = (opt: RogueliteOption) => {
-    if (opt.isLoading) return; // Cannot pick if loading
     
     setGameState(prev => {
       if (!prev) return null;
@@ -191,21 +113,20 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
 
   // 15s automatic choice timer
   useEffect(() => {
-    if (options.length === 0 || geminiLoading) return;
+    if (options.length === 0) return;
     
     const timer = setInterval(() => {
       setTimeLeft(prev => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [options, geminiLoading]);
+  }, [options]);
 
   useEffect(() => {
-    if (timeLeft <= 0 && options.length > 0 && !geminiLoading) {
-      const availableOpt = options.find(o => !o.isLoading) || options[0];
-      pickOption(availableOpt);
+    if (timeLeft <= 0 && options.length > 0) {
+      pickOption(options[0]);
     }
-  }, [timeLeft, options, geminiLoading]);
+  }, [timeLeft, options]);
 
   const buyLife = () => {
     if (gameState.gold >= costLife) {
@@ -264,49 +185,53 @@ export default function StageClearOverlay({ gameState, setGameState, addNotifica
 
       <div className="grid grid-cols-3 gap-1.5 sm:gap-4 md:gap-6 w-full max-w-5xl mb-6 sm:mb-12 px-1 sm:px-4">
         {options.map((opt, i) => {
-          const isMiddle = i === 1;
-          const loading = opt.isLoading;
+          const isAIResp = !!geminiEncounters;
+          const rColor = opt.rarity ? RARITY_COLORS[opt.rarity as keyof typeof RARITY_COLORS] || RARITY_COLORS.common || '#3498db' : RARITY_COLORS.common || '#3498db';
+          
           return (
              <motion.div
               key={opt.name + i}
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 + i * 0.1 }}
-              whileHover={!loading ? { y: -6, borderColor: '#d4af37', boxShadow: '0 0 30px rgba(212,175,55,0.1)' } : undefined}
+              whileHover={{ y: -6, borderColor: rColor, boxShadow: `0 0 30px ${rColor}33` }}
               onClick={() => pickOption(opt)}
-              className={`group flex flex-col items-center text-center p-2 sm:p-6 md:p-8 rounded-lg transition-all relative
-                ${loading ? 'opacity-70 cursor-wait' : 'cursor-pointer'}
-                ${isMiddle 
-                  ? 'h-[14rem] sm:h-80 md:h-[26rem] bg-[#1a1524] border-2 border-purple-500/50 shadow-[0_0_50px_rgba(147,51,234,0.15)] md:z-10 bg-gradient-to-b from-purple-900/20 to-[#1a1524]' 
-                  : 'h-44 sm:h-76 md:h-80 bg-[#121218] border border-gray-800 hover:border-gold md:mt-4'}`}
+              className={`group flex flex-col items-center text-center p-2 sm:p-6 md:p-8 rounded-lg transition-all relative cursor-pointer
+                h-auto min-h-[14rem] sm:min-h-80 md:min-h-[24rem] border-2 bg-gradient-to-b md:mt-4`}
+              style={{
+                borderColor: `${rColor}55`,
+                backgroundColor: '#121218',
+                backgroundImage: `linear-gradient(to bottom, ${rColor}15, #1a1524)`,
+                boxShadow: `0 0 15px ${rColor}15`
+              }}
             >
-              {isMiddle && !loading && (
-                 <div className="absolute inset-0 bg-gradient-to-t from-transparent to-purple-500/10 pointer-events-none rounded-lg" />
-              )}
-              {isMiddle && (
-                <div className={`absolute -top-3 left-1/2 -translate-x-1/2 ${loading ? 'bg-gray-600' : 'bg-gradient-to-r from-fuchsia-600 to-purple-600'} text-white text-[7px] sm:text-[10px] px-3 sm:px-4 py-0.5 sm:py-1 font-bold uppercase tracking-widest whitespace-nowrap rounded font-sans shadow-lg flex items-center gap-1`}>
-                  {loading ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
-                  {loading ? 'Đang hỏi AI...' : 'AI Kỳ Ngộ'}
+              <div className="absolute inset-0 pointer-events-none rounded-lg" style={{ background: `linear-gradient(to top, transparent, ${rColor}10)` }} />
+              
+              {isAIResp && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 text-white text-[7px] sm:text-[10px] px-3 sm:px-4 py-0.5 sm:py-1 font-bold uppercase tracking-widest whitespace-nowrap rounded font-sans shadow-lg flex items-center gap-1"
+                     style={{ background: `linear-gradient(to right, ${rColor}, ${rColor}88)` }}>
+                  <Sparkles className="w-3 h-3"/>
+                  Kỳ Ngộ {opt.rarity || 'Normal'}
                 </div>
               )}
               
-              <div className={`rounded-full flex items-center justify-center border aspect-square mb-2 sm:mb-6 transition-transform group-hover:scale-110 relative z-10
-                ${isMiddle ? (loading ? 'bg-gray-800 border-gray-700' : 'w-10 h-10 sm:w-20 sm:h-20 bg-purple-950/40 border-purple-500/50 text-xl sm:text-4xl shadow-[0_0_20px_rgba(168,85,247,0.4)]') : 'w-8 h-8 sm:w-16 sm:h-16 bg-gray-900/30 border-gray-800 text-lg sm:text-3xl'}`}
+              <div className="rounded-full flex items-center justify-center border aspect-square mb-2 sm:mb-6 transition-transform group-hover:scale-110 relative z-10 w-10 h-10 sm:w-20 sm:h-20 text-xl sm:text-4xl"
+                   style={{ backgroundColor: `${rColor}22`, borderColor: `${rColor}55`, boxShadow: `0 0 20px ${rColor}66` }}
               >
-                <opt.icon className={`${isMiddle ? 'w-5 h-5 sm:w-10 sm:h-10 text-fuchsia-400' : 'w-4 h-4 sm:w-8 sm:h-8 text-blue-400'} ${loading ? 'animate-spin text-gray-500' : ''}`} />
+                <opt.icon className="w-5 h-5 sm:w-10 sm:h-10" style={{ color: rColor }} />
               </div>
 
-              <h3 className={`font-serif mb-1 sm:mb-4 drop-shadow-md font-bold truncate w-full relative z-10 ${isMiddle ? (loading ? 'text-gray-400' : 'text-fuchsia-300 text-xs sm:text-2xl') : 'text-gray-300 text-[10px] sm:text-xl'}`}>
+              <h3 className="font-serif mb-1 sm:mb-4 drop-shadow-md font-bold truncate whitespace-normal w-full relative z-10 text-xs sm:text-lg md:text-xl" style={{ color: rColor }}>
                 {opt.name}
               </h3>
               
-              <p className={`leading-relaxed font-serif overflow-hidden relative z-10 ${isMiddle ? (loading ? 'text-gray-500 text-[8px] sm:text-sm' : 'text-[9px] sm:text-base text-purple-200 drop-shadow') : 'text-[7px] sm:text-xs text-gray-500'}`}>
+              <p className="leading-relaxed font-serif overflow-hidden relative z-10 text-[9px] sm:text-xs md:text-sm drop-shadow" style={{ color: '#ddd' }}>
                 {opt.desc}
               </p>
               
               <div className="mt-auto hidden sm:block relative z-10">
-                <span className={`text-[7px] sm:text-[9px] font-bold uppercase tracking-[0.2em] ${isMiddle ? 'text-purple-400' : 'text-gray-600'}`}>
-                  {isMiddle ? 'AI Duyên Ngộ' : 'Bình Thường'}
+                <span className="text-[7px] sm:text-[9px] font-bold uppercase tracking-[0.2em]" style={{ color: rColor }}>
+                  {isAIResp ? 'Thiên Cơ' : 'Bình Thường'}
                 </span>
               </div>
             </motion.div>

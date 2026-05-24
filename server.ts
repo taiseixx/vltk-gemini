@@ -25,18 +25,21 @@ async function startServer() {
         Máu hiện tại: ${gameState.player.hp}/${gameState.player.maxHp}.
         Vàng: ${gameState.gold}.
 
-        Sinh ra một tình huống "Kỳ ngộ giang hồ" (Random encounter) ngẫu nhiên có ảnh hưởng tới nhân vật. 
-        Nó có thể là tìm thấy một bảo vật bị bỏ quên, giải cứu một vị cao nhân (được tĩnh tâm, buff), ăn nhầm cỏ độc, v.v.
-        Hãy trả lời bằng định dạng JSON nghiêm ngặt tuân thủ cấu trúc sau, KHÔNG dùng markdown tags (như \`\`\`json) quanh phản hồi.
+        Sinh ra 3 tình huống "Kỳ ngộ giang hồ" (Random encounter) ngẫu nhiên có ảnh hưởng tới nhân vật. 
+        Mỗi kỳ ngộ phải có độ hiếm khác nhau (Normal, Rare, Epic, Legendary), nội dung rất ngắn gọn gọn gàng để vừa màn hình mobile.
+        Hãy trả lời bằng định dạng JSON nghiêm ngặt tuân thủ cấu trúc sau (trả về 1 mảng gồm 3 object).
         
-        {
-          "event_text": "Mô tả kỳ ngộ một cách sống động bằng phong cách kiếm hiệp (khoảng 2-3 câu).",
-          "stat_changes": {
-            "hp": <nguyên dương là hồi máu, âm là mất máu. Trả về 0 nếu không đổi>,
-            "gold": <dương là nhận vàng, âm là mất vàng. Trả về 0 nếu không đổi>
-          },
-          "item_drop": <(Tùy chọn) null hoặc tên một món vũ khí/trang bị nếu được nhận>
-        }
+        [
+          {
+            "name": "Tên Kỳ Ngộ (Ngắn, ấn tượng)",
+            "rarity": "normal | rare | epic | legendary",
+            "event_text": "Mô tả kỳ ngộ cực ngắn gọn (1 câu dài nhất).",
+            "stat_changes": {
+              "hp": <nguyên dương là hồi máu, âm là mất máu>,
+              "gold": <dương là nhận vàng, âm là mất vàng>
+            }
+          }
+        ]
       `;
 
       const response = await ai.models.generateContent({
