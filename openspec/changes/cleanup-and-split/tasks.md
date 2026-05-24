@@ -15,20 +15,20 @@
 - [x] 2.6 Chạy `npm install` để regenerate `package-lock.json` — 58 packages removed. **Side-effect**: had to add `@types/react` + `@types/react-dom` to devDependencies (they were transitively pulled in by `@pixi/react` peer deps and the project never declared them itself)
 - [x] 2.7 Verify: `grep -r "cc\." src/` zero matches, `grep -r "from '\(pixi\|@pixi\|@google/genai\)" src/ server.ts vite.config.ts` zero matches
 - [x] 2.8 `npm run lint && npm run build` pass — JS bundle 580 KB → 574 KB
-- [~] 2.9 Smoke test stage 1: damage label vẫn fade-up bình thường, không error console — **PENDING USER SMOKE TEST**
-- [ ] 2.10 Commit `refactor: remove cocos engine and unused dependencies`
+- [x] 2.9 Smoke test stage 1: damage label vẫn fade-up bình thường, không error console — user confirmed OK
+- [x] 2.10 Commit `refactor: remove cocos engine and unused dependencies` — commit 71eb743
 
 ## 3. Checkpoint 2 — Tách render/imageProcessing và render/imageCache
 
-- [ ] 3.1 Tạo `src/render/imageProcessing.ts`
-- [ ] 3.2 Move `removeCharacterBackground` (GameCanvas dòng 59-135) sang module mới, export
-- [ ] 3.3 Move `removeBlackBackground` (GameCanvas dòng 137-197) sang module mới, export
-- [ ] 3.4 Tạo `src/render/imageCache.ts`
-- [ ] 3.5 Move `GLOBAL_IMAGE_CACHE` (dòng 200) và `getCachedFilteredImage` sang module mới, export. Import `removeCharacterBackground`/`removeBlackBackground` từ `imageProcessing.ts`
-- [ ] 3.6 Trong `GameCanvas.tsx`, replace local declarations bằng `import { getCachedFilteredImage } from '../render/imageCache'`
-- [ ] 3.7 Verify import boundary: `imageProcessing.ts` không import từ `react/game`
-- [ ] 3.8 `npm run lint && npm run build` pass
-- [ ] 3.9 Smoke test: ảnh sprite load đúng, không có sprite trắng/vỡ
+- [x] 3.1 Tạo `src/render/imageProcessing.ts`
+- [x] 3.2 Move `removeCharacterBackground` (GameCanvas dòng 59-135) sang module mới, export
+- [x] 3.3 Move `removeBlackBackground` (GameCanvas dòng 137-197) sang module mới, export
+- [x] 3.4 Tạo `src/render/imageCache.ts`
+- [x] 3.5 Move `GLOBAL_IMAGE_CACHE` (dòng 200) và `getCachedFilteredImage` sang module mới, export. Import `removeCharacterBackground`/`removeBlackBackground` từ `imageProcessing.ts`
+- [x] 3.6 Trong `GameCanvas.tsx`, replace local declarations bằng `import { getCachedFilteredImage } from '../render/imageCache'`
+- [x] 3.7 Verify import boundary: `imageProcessing.ts` không import từ `react/game` — grep clean
+- [x] 3.8 `npm run lint && npm run build` pass
+- [x] 3.9 Smoke test: ảnh sprite load đúng, không có sprite trắng/vỡ — user confirmed (tạm OK, không thấy regression)
 - [ ] 3.10 Commit `refactor: extract image processing and cache into render layer`
 
 ## 4. Checkpoint 3 — Tách render/spriteLoader
