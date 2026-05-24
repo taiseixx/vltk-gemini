@@ -29,6 +29,10 @@
   <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_nm_banner_1779383219739.png" alt="Võ Lâm Giang Hồ Banner 3" width="100%">
 </p>
 
+<p align="center">
+  <img src="https://github.com/taiseixx/vltk-gemini/blob/main/src/assets/images/volam_feminine_elegance_1779382251364.png" alt="Võ Lâm Giang Hồ Banner 5" width="100%">
+</p>
+
 ---
 
 ## 🛠️ Tech Under the Hood
