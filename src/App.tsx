@@ -354,16 +354,16 @@ export default function App() {
       </AnimatePresence>
 
       {/* Notifications */}
-      <div className="fixed top-[30%] left-1/2 -translate-x-1/2 z-[100] pointer-events-none flex flex-col gap-2 items-center">
+      <div className="fixed top-[15%] left-1/2 -translate-x-1/2 z-[100] pointer-events-none flex flex-col gap-2.5 items-center">
         <AnimatePresence>
           {notifications.map(n => (
             <motion.div
               key={n.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              style={{ color: n.color, borderColor: n.color }}
-              className="bg-black/80 border px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap shadow-lg"
+              initial={{ opacity: 0, y: 15, scale: 0.95 }}
+              animate={{ opacity: 0.85, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -30, scale: 0.9 }}
+              style={{ color: n.color }}
+              className="bg-black/60 border border-white/10 px-5 py-2.5 rounded-full text-xs font-serif italic font-bold whitespace-nowrap shadow-[0_4px_15px_rgba(0,0,0,0.5)] backdrop-blur-sm"
             >
               {n.text}
             </motion.div>

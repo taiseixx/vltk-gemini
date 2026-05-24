@@ -40,7 +40,7 @@ export default function StatsPopup({ gameState, setGameState, onClose, activeTab
     const item = gameState.companion.equipment[slot];
     if (!item) return;
     
-    const cost = Math.floor(150 * Math.pow(1.6, item.upgradeLvl || 0) * priceMultiplier);
+    const cost = Math.floor(150 * Math.pow(1.2, item.upgradeLvl || 0) * priceMultiplier);
     if (gameState.gold < cost) return;
 
     setGameState(prev => {
@@ -56,9 +56,9 @@ export default function StatsPopup({ gameState, setGameState, onClose, activeTab
 
       // recalculate companion stats based on new equip level
       if (slot === 'weapon') {
-        comp.atk = 15 + comp.level * 4 + subItem.upgradeLvl * 5;
+        comp.atk = 15 + comp.level * 4 + subItem.upgradeLvl * 20;
       } else {
-        comp.maxHp = 150 + comp.level * 25 + subItem.upgradeLvl * 50;
+        comp.maxHp = 150 + comp.level * 25 + subItem.upgradeLvl * 250;
         comp.hp = comp.maxHp;
       }
 
@@ -70,22 +70,24 @@ export default function StatsPopup({ gameState, setGameState, onClose, activeTab
     });
   };
 
-  const addStat = (st: keyof typeof p.baseStats) => {
-    if (p.statPoints <= 0) return;
+  const addStat = (st: keyof typeof p.baseStats, pts: number = 1) => {
+    if (p.statPoints < pts) pts = p.statPoints;
+    if (pts <= 0) return;
+    
     setGameState(prev => {
       if (!prev) return null;
-      const newBase = { ...prev.player.baseStats, [st]: prev.player.baseStats[st] + 1 };
+      const newBase = { ...prev.player.baseStats, [st]: prev.player.baseStats[st] + pts };
       
       // Recalc current stats and dependant values
       const buffs = prev.buffs;
-      const newMaxHp = Math.floor((100 + newBase.con * 20) * buffs.hpMult);
-      const newAtk = Math.floor((10 + newBase.str * 3) * buffs.dmgMult);
+      const newMaxHp = Math.floor((300 + newBase.con * 20) * buffs.hpMult);
+      const newAtk = Math.floor((25 + newBase.str * 3) * buffs.dmgMult);
       
       return {
         ...prev,
         player: { 
           ...prev.player, 
-          statPoints: prev.player.statPoints - 1, 
+          statPoints: prev.player.statPoints - pts, 
           baseStats: newBase,
           currentStats: { ...newBase }, // Simple copy for now
           maxHp: newMaxHp,
@@ -118,15 +120,27 @@ export default function StatsPopup({ gameState, setGameState, onClose, activeTab
           <span className="text-base select-none">{emoji}</span>
           <span className="text-zinc-300 text-xs font-bold">{label}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-yellow-500 font-extrabold text-xs">{value}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-yellow-500 font-extrabold text-xs mr-1">{value}</span>
           {stKey && p.statPoints > 0 && (
-            <button 
-              onPointerDown={(e) => { e.stopPropagation(); addStat(stKey); }}
-              className="w-5 h-5 bg-green-600/80 hover:bg-green-600 text-white rounded flex items-center justify-center transition-colors pointer-events-auto cursor-pointer"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
+            <>
+              <button 
+                onPointerDown={(e) => { e.stopPropagation(); addStat(stKey, 1); }}
+                className="w-5 h-5 bg-green-600/80 hover:bg-green-600 text-white rounded flex items-center justify-center transition-colors pointer-events-auto cursor-pointer"
+                title="+1"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+              {p.statPoints >= 10 && (
+                <button 
+                  onPointerDown={(e) => { e.stopPropagation(); addStat(stKey, 10); }}
+                  className="px-1 h-5 bg-green-600/80 hover:bg-green-600 text-[9px] font-bold text-white rounded flex items-center justify-center transition-colors pointer-events-auto cursor-pointer"
+                  title="+10"
+                >
+                  +10
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -214,8 +228,32 @@ export default function StatsPopup({ gameState, setGameState, onClose, activeTab
                   <span className="text-red-500 font-serif font-bold text-xs">{p.atk}</span>
                 </div>
                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
-                  <span className="text-gray-500">Máu Tối Đa</span>
-                  <span className="text-red-500 font-serif font-bold text-xs">{p.maxHp}</span>
+                  <span className="text-gray-500">Máu Tối Đa (HP)</span>
+                  <span className="text-green-500 font-serif font-bold text-xs">{p.maxHp}</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
+                  <span className="text-gray-500">Nội Lực (MP)</span>
+                  <span className="text-blue-500 font-serif font-bold text-xs">{p.maxMp}</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
+                  <span className="text-gray-500">Tỉ Lệ Chí Mạng</span>
+                  <span className="text-purple-400 font-serif font-bold text-xs">{(10 + p.currentStats.agi * 0.5 + (gameState.buffs.critChanceBonus || 0) * 100).toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
+                  <span className="text-gray-500">Sát Thương Chí Mạng</span>
+                  <span className="text-purple-400 font-serif font-bold text-xs">{((gameState.buffs.critDmgMult || 1.5) * 100).toFixed(0)}%</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
+                  <span className="text-gray-500">Tốc Độ Hồi HP</span>
+                  <span className="text-green-400 font-serif font-bold text-xs">+{(p.currentStats.con * 0.15 + 0.4 + (gameState.buffs.hpRegenBonus || 0)).toFixed(1)}/s</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
+                  <span className="text-gray-500">Tốc Độ Hồi MP</span>
+                  <span className="text-blue-400 font-serif font-bold text-xs">+{(p.currentStats.nei * 0.35 + 0.6 + (gameState.buffs.mpRegenBonus || 0)).toFixed(1)}/s</span>
+                </div>
+                <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest font-sans">
+                  <span className="text-gray-500">Sát Thương Tuyệt Học</span>
+                  <span className="text-yellow-500 font-serif font-bold text-xs">+{p.currentStats.int * 5}</span>
                 </div>
               </div>
 
@@ -223,8 +261,10 @@ export default function StatsPopup({ gameState, setGameState, onClose, activeTab
                 <p className="text-[9px] text-gray-500 font-bold mb-1.5 uppercase tracking-[0.2em] font-sans">Cơ Duyên Hiện Tại</p>
                 <div className="space-y-1 text-[10px] text-gold/75 italic font-serif">
                   {gameState.buffs.dmgMult > 1 && <p>+ Tăng sát thương: {Math.floor(gameState.buffs.dmgMult * 100 - 100)}%</p>}
-                  {gameState.buffs.hpMult > 1 && <p>+ Tăng sinh lực: {Math.floor(gameState.buffs.hpMult * 100 - 100)}%</p>}
-                  {gameState.buffs.cdReduc > 0 && <p>+ Giảm hồi chiêu: {Math.floor(gameState.buffs.cdReduc * 100)}%</p>}
+                  {gameState.buffs.hpMult > 1 && <p>+ Tăng sinh lực tối đa: {Math.floor(gameState.buffs.hpMult * 100 - 100)}%</p>}
+                  {(gameState.buffs.resMult || 1) > 1 && <p>+ Kháng sát thương: {Math.floor((gameState.buffs.resMult - 1) * 100)}%</p>}
+                  {gameState.buffs.cdReduc > 0 && <p>+ Giảm thời gian hồi chiêu: {Math.floor(gameState.buffs.cdReduc * 100)}% / 75%</p>}
+                  {(gameState.buffs.lifeSteal || 0) > 0 && <p>+ Hút máu sinh mệnh: {Math.floor((gameState.buffs.lifeSteal || 0) * 100)}%</p>}
                   {(!gameState.buffs.dmgMult && !gameState.buffs.hpMult && !gameState.buffs.cdReduc) && <p className="text-gray-600">Chưa tìm thấy cơ duyên tăng chí...</p>}
                 </div>
               </div>

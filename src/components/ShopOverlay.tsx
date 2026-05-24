@@ -73,30 +73,29 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
     // Choose a random manual of `rarity` matching player's sectId, or generic
     const sectId = gameState.player.sectId || 'sl';
     const sectManuals = SECT_LEVEL_MANUALS[sectId] || [];
-    let template = sectManuals.find(m => m.rarity === rarity);
     
-    // If not found in sect, roll from generic pool
-    if (!template) {
-      const genericTemplates = [
-        { name: 'Tây Vực Càn Khôn Đại Na Di Quyết', rarity: 'rare' as const, effect: 'Cơ duyên: +6% Kháng phòng thủ toàn diện', statBoost: { resBonus: 0.06 } },
-        { name: 'Giang Hồ Độc Cô Cửu Kiếm Tàn Di bản', rarity: 'epic' as const, effect: 'Cơ duyên: +5% Tỉ lệ Chí Mạng sát phạt', statBoost: { atkChance: 0.05 } },
-        { name: 'Cổ Bản Thần Hành Bách Biến Pháp Kỳ', rarity: 'rare' as const, effect: 'Cơ duyên: Rút ngắn 6% CD xuất pháp trận', statBoost: { atkSpeed: 0.06 } },
-        { name: 'Cửu Dương Thần Kinh Sơ Giải Quyết', rarity: 'legendary' as const, effect: 'Cơ duyên: +50 HP sinh khí & +25 MP nội nguyên', statBoost: { hpBonus: 50, mpBonus: 25 } },
-      ];
-      const matches = genericTemplates.filter(t => t.rarity === rarity);
-      if (matches.length > 0) {
-        template = matches[Math.floor(Math.random() * matches.length)];
-      } else {
-        template = genericTemplates[0]; // Fallback
-      }
-    }
+    const genericTemplates = [
+      { name: 'Tây Vực Càn Khôn Đại Na Di Quyết', rarity: 'rare' as const, effect: 'Cơ duyên: +6% Kháng phòng thủ toàn diện', statBoost: { resBonus: 0.06 } },
+      { name: 'Giang Hồ Độc Cô Cửu Kiếm Tàn Di bản', rarity: 'epic' as const, effect: 'Cơ duyên: +5% Tỉ lệ Chí Mạng sát phạt', statBoost: { atkChance: 0.05 } },
+      { name: 'Cổ Bản Thần Hành Bách Biến Pháp Kỳ', rarity: 'rare' as const, effect: 'Cơ duyên: Rút ngắn 6% CD xuất pháp trận', statBoost: { atkSpeed: 0.06 } },
+      { name: 'Cửu Dương Thần Kinh Sơ Giải Quyết', rarity: 'legendary' as const, effect: 'Cơ duyên: +50 HP sinh khí & +25 MP nội nguyên', statBoost: { hpBonus: 50, mpBonus: 25 } },
+    ];
+
+    // Combine sect specific and generic templates for this rarity
+    const allCandidates = [...sectManuals, ...genericTemplates].filter(t => t.rarity === rarity);
     
-    // Check if player already possesses this manual!
-    const alreadyHas = gameState.manuals?.some(m => m.name.includes(template!.name));
-    if (alreadyHas) {
-      alert(`Đạo hữu đã lĩnh ngộ môn tuyệt học [${template.name}] trước đó rồi! Thể chất đã bão hòa.`);
+    // Filter out ones the player already has
+    const availableTemplates = allCandidates.filter(t => 
+      !gameState.manuals?.some(m => m.name.includes(t.name))
+    );
+
+    if (availableTemplates.length === 0) {
+      alert(`Đạo hữu đã lĩnh ngộ hết tất cả môn tuyệt học cấp độ này! Thể chất đã bão hòa.`);
       return;
     }
+
+    // Pick a random template from available ones
+    const template = availableTemplates[Math.floor(Math.random() * availableTemplates.length)];
     
     const HERITAGES: import('../types').HeritagePrefix[] = ['thất truyền', 'gia truyền', 'tông truyền', 'ân điển'];
     const randomHeritage = HERITAGES[Math.floor(Math.random() * HERITAGES.length)];

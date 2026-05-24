@@ -221,6 +221,10 @@ export interface GameState {
     rlExec: number;
     critDmgMult?: number;
     skillRangeBonus?: number;
+    critChanceBonus?: number;
+    lifeSteal?: number;
+    hpRegenBonus?: number;
+    mpRegenBonus?: number;
   };
 
   skills: Skill[];

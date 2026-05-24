@@ -260,6 +260,9 @@ export default function GameCanvas({
   const pointerDownRef = useRef(false);
   const startPointerRef = useRef<{ clientX: number, clientY: number } | null>(null);
 
+  const frameTotalDmgRef = useRef(0);
+  const companionTotalDmgRef = useRef(0);
+
   const grassImgRef = useRef<HTMLImageElement | null>(null);
   const stoneImgRef = useRef<HTMLImageElement | null>(null);
   const grassPatternRef = useRef<CanvasPattern | null>(null);
@@ -998,7 +1001,6 @@ export default function GameCanvas({
             p.rageTimer = 8.0;
             p.rage = p.maxRage || 100;
             shakeRef.current = 15;
-            addNotification("🔥 BỘC PHÁT THẾ NGŨ HÀNH 🔥", p.color);
             
             // Spawn spectacular shockwave ring upon burst!
             particlesRef.current.push({
@@ -1332,7 +1334,7 @@ export default function GameCanvas({
           const dist = Math.hypot(e.x - tx, e.y - ty);
           if (dist <= actualRange) {
             const elementInfo = getElementalMultipliers(playerEl, e.element);
-            const isCrit = Math.random() < (0.10 + p.currentStats.agi * 0.005);
+            const isCrit = Math.random() < (0.10 + p.currentStats.agi * 0.005 + (buffs.critChanceBonus || 0));
             
             let elementalDamage = damage * elementInfo.mult;
             if (p.rageActive) elementalDamage *= 1.5; // active burst 1.5x damage!
@@ -1342,6 +1344,22 @@ export default function GameCanvas({
               const Math_floor = Math.floor;
               const critDb = buffs.critDmgMult || 1.5;
               d = Math_floor(d * critDb);
+            }
+            
+            // Lifesteal
+            if (buffs.lifeSteal) {
+              const heal = Math.floor(d * buffs.lifeSteal);
+              if (heal > 0 && p.hp < p.maxHp) {
+                p.hp = Math.min(p.maxHp, p.hp + heal);
+                textsRef.current.push({
+                  id: Math.random(),
+                  x: p.x,
+                  y: p.y - 20,
+                  text: `+${heal}`,
+                  color: "#2ecc71",
+                  life: 1,
+                });
+              }
             }
             
             // Accumulate player rage on skill target hit
@@ -1372,14 +1390,18 @@ export default function GameCanvas({
               skillColor = '#ff4d00';
             }
             
-            textsRef.current.push({
-              id: Math.random(),
-              x: e.x + (Math.random() - 0.5) * 20,
-              y: e.y - 20 - Math.random() * 20,
-              text: skillText,
-              color: skillColor,
-              life: isCrit ? 1.8 : 1.5
-            });
+            if (textsRef.current.length < 35) {
+              textsRef.current.push({
+                id: Math.random(),
+                x: e.x + (Math.random() - 0.5) * 20,
+                y: e.y - 20 - Math.random() * 20,
+                text: skillText,
+                color: skillColor,
+                life: isCrit ? 1.8 : 1.5
+              });
+            } else {
+              frameTotalDmgRef.current += d;
+            }
           }
         });
       }
@@ -1480,14 +1502,18 @@ export default function GameCanvas({
       txtColor = '#ff3300';
     }
 
-    textsRef.current.push({
-      id: Math.random(),
-      x: e.x,
-      y: e.y - 30,
-      text: dmgText,
-      color: txtColor,
-      life: pRef.rageActive ? 1.6 : 1.2,
-    });
+    if (textsRef.current.length < 35) {
+      textsRef.current.push({
+        id: Math.random(),
+        x: e.x,
+        y: e.y - 30,
+        text: dmgText,
+        color: txtColor,
+        life: pRef.rageActive ? 1.6 : 1.2,
+      });
+    } else {
+      frameTotalDmgRef.current += finalDamage;
+    }
 
     // Spawn extremely smooth, animated Cocos-Engine Custom Label
     const cocosLabel = new cc.Label(dmgText, pRef.rageActive ? 17 : 13, txtColor);
@@ -1563,12 +1589,18 @@ export default function GameCanvas({
         let newStatPts = prev.player.statPoints;
         let newSkillPts = prev.player.skillPoints;
 
-        const maxExp = Math.floor(100 * Math.pow(1.2, newLevel - 1));
-        if (newExp >= maxExp) {
+        let maxExp = Math.floor(100 * Math.pow(1.2, newLevel - 1));
+        let leveledUp = false;
+        while (newExp >= maxExp) {
           newExp -= maxExp;
           newLevel++;
           newStatPts += 5;
           if (newLevel % 3 === 0) newSkillPts++;
+          leveledUp = true;
+          maxExp = Math.floor(100 * Math.pow(1.2, newLevel - 1));
+        }
+        
+        if (leveledUp && newLevel % 5 === 0) {
           addNotification(`⚡ LÊN CẤP ${newLevel}!`, "#f1c40f");
         }
 
@@ -1650,16 +1682,21 @@ export default function GameCanvas({
         if (companion) {
           companion = { ...companion };
           companion.exp += expGain * 0.5;
-          const maxCompExp = 120 * companion.level;
-          if (companion.exp >= maxCompExp) {
+          let maxCompExp = Math.floor(100 * Math.pow(1.2, companion.level - 1));
+          
+          while (companion.exp >= maxCompExp) {
             companion.exp -= maxCompExp;
             companion.level += 1;
+            maxCompExp = Math.floor(100 * Math.pow(1.2, companion.level - 1));
+            
             const armorLvl = companion.equipment.armor?.upgradeLvl || 0;
             const clawLvl = companion.equipment.weapon?.upgradeLvl || 0;
-            companion.maxHp = 150 + companion.level * 25 + armorLvl * 50;
+            companion.maxHp = 150 + companion.level * 25 + armorLvl * 250;
             companion.hp = companion.maxHp;
-            companion.atk = 15 + companion.level * 4 + clawLvl * 5;
-            addNotification(`✨ ĐỒNG HÀNH ${companion.name.toUpperCase()} LÊN CẤP ${companion.level}!`, "#ffca28");
+            companion.atk = 15 + companion.level * 4 + clawLvl * 20;
+            if (companion.level % 50 === 0 || companion.level <= 5) {
+              addNotification(`✨ ĐỒNG HÀNH LÊN CẤP ${companion.level}!`, "#ffca28");
+            }
           }
         }
 
@@ -1807,17 +1844,6 @@ export default function GameCanvas({
       // Balanced Armor (GIÁP) -> HP: x0.012 instead of x0.05
       buffs.hpMult = 1 + (eq.armor ? eq.armor.power * 0.012 : 0);
       
-      // Accessory (💍) & Horse (🐴) -> CD reduction (capped at 50% limit to retain skill tactical pacing)
-      const cdBonus = (eq.accessory ? eq.accessory.power * 0.005 : 0) + (eq.horse ? eq.horse.power * 0.003 : 0) + bAtkSpeed;
-      buffs.cdReduc = Math.min(0.50, cdBonus);
-      
-      // Special (🔮) -> Resistance (resMult)
-      buffs.resMult = (1 + (eq.special ? eq.special.power * 0.025 : 0)) * bResBonus;
-      
-      // Movement speed -> Horse (🐴) adds direct speed
-      const speedBonus = eq.horse ? eq.horse.power * 4 : 0;
-      p.speed = 160 + p.currentStats.agi * 5 + speedBonus;
-      
       // Cloak (🧥) -> Crit DMG Multiplier
       const critDmgBonus = eq.cloak ? eq.cloak.power * 0.008 : 0;
       buffs.critDmgMult = 1.5 + critDmgBonus;
@@ -1825,6 +1851,22 @@ export default function GameCanvas({
       // Seal (🔏) -> Skill range bonus
       const rangeBonus = eq.seal ? eq.seal.power * 0.8 : 0;
       buffs.skillRangeBonus = rangeBonus;
+      buffs.critChanceBonus = bAtkChance;
+
+      // Banner (🚩) -> Lifesteal
+      const lifeStealBonus = eq.banner ? eq.banner.power * 0.005 : 0;
+      buffs.lifeSteal = lifeStealBonus;
+
+      // Accessory (💍) & Horse (🐴) -> CD reduction (capped at 75% limit to retain skill tactical pacing)
+      const cdBonus = (eq.accessory ? eq.accessory.power * 0.005 : 0) + (eq.horse ? eq.horse.power * 0.003 : 0) + bAtkSpeed;
+      buffs.cdReduc = Math.min(0.75, cdBonus);
+      
+      // Special (🔮) -> Resistance (resMult)
+      buffs.resMult = (1 + (eq.special ? eq.special.power * 0.025 : 0)) * bResBonus;
+      
+      // Movement speed -> Horse (🐴) adds direct speed
+      const speedBonus = eq.horse ? eq.horse.power * 4 : 0;
+      p.speed = 160 + p.currentStats.agi * 5 + speedBonus;
 
       // Integrate Bí Kíp flat bonuses into player totals
       const newMaxHp = Math.floor(
@@ -1890,6 +1932,15 @@ export default function GameCanvas({
     ctx.fillText(`Prt: ${metrics.particleCount}`, x + padding, y + padding + lineH * 4);
   };
 
+  const TIPS = [
+    "💡 TIP: Nâng cấp Sinh Khí (CON) để sống sót lâu hơn trong những trận chiến kéo dài.",
+    "💡 TIP: Khinh công (Thân Pháp) giúp tăng tỉ lệ chí mạng và tốc độ tiếp cận kẻ thù.",
+    "💡 TIP: Bạn có thể sở hữu tối đa 2 Bí Kíp cùng lúc. Hãy kết hợp thông minh!",
+    "💡 TIP: Nếu quá khó, hãy tập trung farm quái ở các ải đầu để tích lũy Vàng.",
+    "💡 TIP: Linh thú (Đồng Hành) có thể tự động nhặt đồ và tấn công giúp bạn.",
+    "💡 TIP: Ấn Tín (Seal) giúp tăng tầm đánh của các chưởng pháp rất hiệu quả."
+  ];
+
   const drawLoadingScreen = (
     ctx: CanvasRenderingContext2D,
     canvasWidth: number,
@@ -1904,77 +1955,62 @@ export default function GameCanvas({
 
     const cx = canvasWidth / 2;
     const cy = canvasHeight / 2;
-    const r = Math.min(canvasWidth, canvasHeight) * 0.15;
     const progress = Math.min(1, loaded / total);
 
-    // Draw rotating dragon-like outer ring
+    // Dynamic large background icon based on time
+    const EMOJIS = ['🪨', '🪵', '💧', '⚡', '🦂', '🎯', '❄️', '⚔️', '🔥'];
+    const emojiIdx = Math.floor(time * 0.001) % EMOJIS.length;
+    
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(time * 0.002);
-    ctx.beginPath();
-    ctx.arc(0, 0, r + 15, 0, Math.PI * 1.5);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // Dragon head (styled)
-    ctx.beginPath();
-    ctx.arc(r + 15, 0, 6, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.restore();
-
-    // Outer circle for water container
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Clip inner region for water
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r - 2, 0, Math.PI * 2);
-    ctx.clip();
-
-    // Draw water wave
-    // Water height maps progress from 0 (bottom) to 1 (top)
-    const waterY = cy + r - 2 * r * progress;
-    
-    ctx.beginPath();
-    ctx.moveTo(cx - r, cy + r);
-    ctx.lineTo(cx - r, waterY);
-
-    // Wave points
-    for (let x = cx - r; x <= cx + r; x += 10) {
-      const waveHeight = 8 * Math.sin((x - cx) * 0.05 + time * 0.003);
-      ctx.lineTo(x, waterY + waveHeight);
-    }
-    
-    ctx.lineTo(cx + r, cy + r);
-    ctx.closePath();
-    
-    // Gradient for water
-    const gradient = ctx.createLinearGradient(0, cy - r, 0, cy + r);
-    gradient.addColorStop(0, color);
-    
-    // Add opacity to base color 
-    ctx.fillStyle = color; 
-    ctx.globalAlpha = 0.7;
-    ctx.fill();
-    ctx.restore();
-
-    // Text counter
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.globalAlpha = 0.15;
+    ctx.font = '200px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${Math.floor(progress * 100)}%`, cx, cy);
+    ctx.translate(cx, cy - 40);
+    ctx.rotate(Math.sin(time * 0.001) * 0.1);
+    ctx.fillText(EMOJIS[emojiIdx], 0, 0);
+    ctx.restore();
+
+    // Large Golden Percentage
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 54px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Add glowing effect to text
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 20;
+    ctx.fillText(`${Math.floor(progress * 100)}%`, cx, cy - 20);
+    ctx.shadowBlur = 0;
+
+    // Horizontal Progress Bar
+    const barW = Math.min(400, canvasWidth * 0.8);
+    const barH = 14;
+    const barX = cx - barW / 2;
+    const barY = cy + 40;
+
+    // Background bar
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, barH / 2);
+    ctx.fill();
+
+    // Fill bar
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW * progress, barH, barH / 2);
+    ctx.fill();
     
-    ctx.font = '12px sans-serif';
+    // Add small highlight line to fill bar
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.beginPath();
+    ctx.roundRect(barX + 2, barY + 2, barW * progress - 4, barH / 2 - 2, (barH / 2 - 2) / 2);
+    ctx.fill();
+
+    // Tip Texts (changes every 4 seconds)
+    const tipIdx = Math.floor(time * 0.00025) % TIPS.length;
+    ctx.font = 'italic 14px serif';
     ctx.fillStyle = '#aaaaaa';
-    ctx.fillText(`Loading resources...`, cx, cy + r + 45);
+    ctx.fillText(TIPS[tipIdx], cx, cy + 90);
   };
 
 
@@ -2047,17 +2083,46 @@ export default function GameCanvas({
             });
           }
 
-          // Styled yellow floating damage text
-          textsRef.current.push({
-            id: Math.random(),
-            x: nearest.x,
-            y: nearest.y - 40,
-            text: `☯️ [${comp.name}] HỒ TRỢ KÍCH SÁT -${compDamage}`,
-            color: "#ffca28",
-            life: 1.4
-          });
+          // Combine companion damage if there's too much text
+          if (textsRef.current.length < 35) {
+            textsRef.current.push({
+              id: Math.random(),
+              x: nearest.x,
+              y: nearest.y - 40,
+              text: `☯️ [${comp.name}] HỒ TRỢ KÍCH SÁT -${compDamage}`,
+              color: "#ffca28",
+              life: 1.4
+            });
+          } else {
+             companionTotalDmgRef.current += compDamage;
+          }
         }
       }
+    }
+
+    // Push accumulated frame damage if any
+    if (frameTotalDmgRef.current > 0) {
+      textsRef.current.push({
+        id: Math.random(),
+        x: stateRef.current.player.x,
+        y: stateRef.current.player.y - 50,
+        text: `💥 TỔNG KÍCH: -${frameTotalDmgRef.current}`,
+        color: "#ff3300",
+        life: 2.0
+      });
+      frameTotalDmgRef.current = 0;
+    }
+    
+    if (companionTotalDmgRef.current > 0 && comp) {
+      textsRef.current.push({
+        id: Math.random(),
+        x: stateRef.current.player.x,
+        y: stateRef.current.player.y - 70,
+        text: `☯️ HỘ THỂ BẠO ST: -${companionTotalDmgRef.current}`,
+        color: "#ffca28",
+        life: 2.0
+      });
+      companionTotalDmgRef.current = 0;
     }
 
     render(time);
