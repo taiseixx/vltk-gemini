@@ -43,12 +43,12 @@
 
 ## 5. Checkpoint 4 — Tách render/character (drawHuman)
 
-- [ ] 5.1 Tạo `src/render/character.ts`
-- [ ] 5.2 Move `drawHuman` (≈dòng 476-795) sang module mới với signature `drawHuman(ctx, params: DrawHumanParams): void` — chỉ pass primitives + image refs, không pass React state
-- [ ] 5.3 Move `getSectIdFromColor` (dòng 422) sang `src/game/elements.ts` (capability D2 boundary — nó là domain lookup, không phải render). Tạm thời để character.ts import từ game/elements.ts ⚠ NOTE: design D2 cấm render → game. Vì vậy: copy `getSectIdFromColor` cũng vào `render/character.ts` như helper nội bộ HOẶC pass `sectId` trực tiếp như tham số từ caller. **Chọn: pass sectId từ caller.** Caller (GameCanvas) đã có `player.sectId`, không cần lookup từ color.
-- [ ] 5.4 Update call site trong GameCanvas: thay `drawHuman(...)` truyền `sectId` trực tiếp thay vì derive từ color
-- [ ] 5.5 `npm run lint && npm run build` pass
-- [ ] 5.6 Smoke test: nhân vật vẽ đúng cho ít nhất 2 sect (Thiếu Lâm + Võ Đang), animation tay/chân, weapon overlay đúng
+- [x] 5.1 Tạo `src/render/character.ts`
+- [x] 5.2 Move `drawHuman` (≈dòng 476-795) sang module mới với signature `drawHuman(ctx, params: DrawHumanParams)` — params chứa primitives + pre-resolved sectId + pre-resolved sprite
+- [x] 5.3 NOTE: Player không có field `sectId` trên type — chỉ có `color`. Giữ `getSectIdFromColor` ở GameCanvas (Checkpoint 7 sẽ move sang game/elements.ts). Caller derives sectId via helper `resolveSpriteForEntity(color, isBoss)` returning `{ sectId, sprite }`.
+- [x] 5.4 Update 2 call sites: entity render + player render → cả hai gọi `resolveSpriteForEntity` rồi pass result + primitives qua `DrawHumanParams`
+- [x] 5.5 `npm run lint && npm run build` pass
+- [~] 5.6 Smoke test: BYPASSED per user — pushing through to CP8
 - [ ] 5.7 Commit `refactor: extract character rendering into render/character.ts`
 
 ## 6. Checkpoint 5 — Tách render/world (terrain, scenery, particles, texts, loading)
