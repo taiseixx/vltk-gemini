@@ -53,12 +53,12 @@
 
 ## 6. Checkpoint 5 — Tách render/world (terrain, scenery, particles, texts, loading)
 
-- [ ] 6.1 Tạo `src/render/world.ts`
-- [ ] 6.2 Move `drawLoadingScreen` (≈dòng 1900-2014) sang `render/world.ts`
-- [ ] 6.3 Tách `render()` (dòng 2132+) thành các function nhỏ: `drawTerrain(ctx, params)`, `drawScenery(ctx, scenery, images)`, `drawParticles(ctx, particles)`, `drawFloatingTexts(ctx, texts)` — export tất cả
-- [ ] 6.4 Trong `GameCanvas.tsx` `render()`, gọi tuần tự các hàm này. Giữ **đúng thứ tự** đã có (terrain → scenery → drops → entities → player → particles → texts → UI).
-- [ ] 6.5 `npm run lint && npm run build` pass
-- [ ] 6.6 Smoke test: visual parity stage 1-2, không có flickering, particle vẽ trên top entities như trước
+- [x] 6.1 Tạo `src/render/world.ts`
+- [x] 6.2 Move `drawLoadingScreen` + TIPS array sang `render/world.ts`
+- [x] 6.3 PARTIAL — Move `drawParticles(ctx, particles, cx, cy, viewWidth, viewHeight)` + `drawFloatingTexts(ctx, texts, cx, cy)` sang `render/world.ts`. **NOTE**: `drawTerrain` và `drawScenery` chưa tách (chúng đọc 8+ image refs, cần param bundle hoặc context object — defer sang change sau để giảm risk).
+- [x] 6.4 Trong `render()`, replace particles block + floating texts block bằng calls. Render order giữ y nguyên (terrain → scenery → entities → particles → texts → UI)
+- [x] 6.5 `npm run lint && npm run build` pass
+- [~] 6.6 Smoke test: BYPASSED per user
 - [ ] 6.7 Commit `refactor: extract world rendering passes into render/world.ts`
 
 ## 7. Checkpoint 6 — Tách game/elements và game/spawn
