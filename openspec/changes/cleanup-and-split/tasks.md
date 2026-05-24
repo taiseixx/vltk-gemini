@@ -1,0 +1,120 @@
+## 1. Pre-flight & Branch Setup
+
+- [ ] 1.1 Tạo branch `refactor/cleanup-and-split` từ main
+- [ ] 1.2 Verify build hiện tại: `npm install && npm run lint && npm run build` đều pass
+- [ ] 1.3 Smoke test pre-cleanup: chạy `npm run dev`, chọn Thiếu Lâm, chơi stage 1-3, ghi lại FPS (mở F3 nếu có perf overlay), chụp 5 screenshot mốc (sect select, stage 1 start, mid-fight, boss, stage clear)
+- [ ] 1.4 Commit `chore: pre-cleanup checkpoint` (empty commit) và tag `pre-cleanup`
+
+## 2. Checkpoint 1 — Xóa dead deps và cocos engine
+
+- [ ] 2.1 Sửa `src/components/GameCanvas.tsx`: xóa 3 dòng `import { cc } from "../lib/cocos"`, `cocosSceneRef`, `cocosParticlesRef`, `useEffect` setup cocos (≈10 dòng)
+- [ ] 2.2 Thay thế đoạn dùng `cc.Label + cc.sequence(...)` (quanh dòng 1519-1536) bằng `textsRef.current.push({ id, x, y, text, color, life })` với life tương đương duration animation cũ
+- [ ] 2.3 Xóa `cc.director.update(dt)` ở game loop (dòng 2043)
+- [ ] 2.4 Xóa thư mục `src/lib/cocos/` hoàn toàn
+- [ ] 2.5 Gỡ `@google/genai`, `pixi.js`, `@pixi/react`, `pixi-filters` khỏi `package.json` dependencies
+- [ ] 2.6 Chạy `npm install` để regenerate `package-lock.json`
+- [ ] 2.7 Verify: `grep -r "cc\." src/` zero matches, `grep -r "from '\(pixi\|@pixi\|@google/genai\)" src/ server.ts vite.config.ts` zero matches
+- [ ] 2.8 `npm run lint && npm run build` pass
+- [ ] 2.9 Smoke test stage 1: damage label vẫn fade-up bình thường, không error console
+- [ ] 2.10 Commit `refactor: remove cocos engine and unused dependencies`
+
+## 3. Checkpoint 2 — Tách render/imageProcessing và render/imageCache
+
+- [ ] 3.1 Tạo `src/render/imageProcessing.ts`
+- [ ] 3.2 Move `removeCharacterBackground` (GameCanvas dòng 59-135) sang module mới, export
+- [ ] 3.3 Move `removeBlackBackground` (GameCanvas dòng 137-197) sang module mới, export
+- [ ] 3.4 Tạo `src/render/imageCache.ts`
+- [ ] 3.5 Move `GLOBAL_IMAGE_CACHE` (dòng 200) và `getCachedFilteredImage` sang module mới, export. Import `removeCharacterBackground`/`removeBlackBackground` từ `imageProcessing.ts`
+- [ ] 3.6 Trong `GameCanvas.tsx`, replace local declarations bằng `import { getCachedFilteredImage } from '../render/imageCache'`
+- [ ] 3.7 Verify import boundary: `imageProcessing.ts` không import từ `react/game`
+- [ ] 3.8 `npm run lint && npm run build` pass
+- [ ] 3.9 Smoke test: ảnh sprite load đúng, không có sprite trắng/vỡ
+- [ ] 3.10 Commit `refactor: extract image processing and cache into render layer`
+
+## 4. Checkpoint 3 — Tách render/spriteLoader
+
+- [ ] 4.1 Tạo `src/render/spriteLoader.ts`. Định nghĩa type `SpriteManifest` mô tả danh sách image cần load (key, src path, filter type, tolerance)
+- [ ] 4.2 Export hàm `loadAllSprites(manifest, onProgress): Promise<Record<string, CanvasImageSource>>` — internally dùng `getCachedFilteredImage` nhưng wrap trong Promise
+- [ ] 4.3 Trong `GameCanvas.tsx`, replace `useEffect` loader (dòng 308-412) bằng một useEffect ngắn: build manifest, gọi `loadAllSprites`, set vào refs khi resolve
+- [ ] 4.4 Giữ counter `loadedResourcesRef.current` để loading screen vẫn hoạt động (hoặc đổi sang progress state — giữ counter cho phase này để tránh thay đổi behavior)
+- [ ] 4.5 `npm run lint && npm run build` pass
+- [ ] 4.6 Smoke test: loading screen vẫn hiển thị progress, vào game không stuck
+- [ ] 4.7 Commit `refactor: extract sprite loader into render layer`
+
+## 5. Checkpoint 4 — Tách render/character (drawHuman)
+
+- [ ] 5.1 Tạo `src/render/character.ts`
+- [ ] 5.2 Move `drawHuman` (≈dòng 476-795) sang module mới với signature `drawHuman(ctx, params: DrawHumanParams): void` — chỉ pass primitives + image refs, không pass React state
+- [ ] 5.3 Move `getSectIdFromColor` (dòng 422) sang `src/game/elements.ts` (capability D2 boundary — nó là domain lookup, không phải render). Tạm thời để character.ts import từ game/elements.ts ⚠ NOTE: design D2 cấm render → game. Vì vậy: copy `getSectIdFromColor` cũng vào `render/character.ts` như helper nội bộ HOẶC pass `sectId` trực tiếp như tham số từ caller. **Chọn: pass sectId từ caller.** Caller (GameCanvas) đã có `player.sectId`, không cần lookup từ color.
+- [ ] 5.4 Update call site trong GameCanvas: thay `drawHuman(...)` truyền `sectId` trực tiếp thay vì derive từ color
+- [ ] 5.5 `npm run lint && npm run build` pass
+- [ ] 5.6 Smoke test: nhân vật vẽ đúng cho ít nhất 2 sect (Thiếu Lâm + Võ Đang), animation tay/chân, weapon overlay đúng
+- [ ] 5.7 Commit `refactor: extract character rendering into render/character.ts`
+
+## 6. Checkpoint 5 — Tách render/world (terrain, scenery, particles, texts, loading)
+
+- [ ] 6.1 Tạo `src/render/world.ts`
+- [ ] 6.2 Move `drawLoadingScreen` (≈dòng 1900-2014) sang `render/world.ts`
+- [ ] 6.3 Tách `render()` (dòng 2132+) thành các function nhỏ: `drawTerrain(ctx, params)`, `drawScenery(ctx, scenery, images)`, `drawParticles(ctx, particles)`, `drawFloatingTexts(ctx, texts)` — export tất cả
+- [ ] 6.4 Trong `GameCanvas.tsx` `render()`, gọi tuần tự các hàm này. Giữ **đúng thứ tự** đã có (terrain → scenery → drops → entities → player → particles → texts → UI).
+- [ ] 6.5 `npm run lint && npm run build` pass
+- [ ] 6.6 Smoke test: visual parity stage 1-2, không có flickering, particle vẽ trên top entities như trước
+- [ ] 6.7 Commit `refactor: extract world rendering passes into render/world.ts`
+
+## 7. Checkpoint 6 — Tách game/elements và game/spawn
+
+- [ ] 7.1 Tạo `src/game/elements.ts`. Move `getSectElement` (dòng 436), `getElementalMultipliers` (dòng 452), `getSectIdFromColor` (dòng 422 — đã unused sau Checkpoint 5, có thể xóa thay vì move; nếu xóa, ghi rõ trong commit)
+- [ ] 7.2 Tạo `src/game/spawn.ts`. Move `getBossCount`, `getMobsTotal`, `spawnWave`, `spawnSubBosses` (dòng 799-...). Convert closures dùng `stateRef`/`particlesRef` thành parameters: `spawnWave(state, entities, particles): Entity[]` returns new entities mảng để caller assign
+- [ ] 7.3 Trong `GameCanvas.tsx`, replace local spawn calls bằng imports + explicit param passing
+- [ ] 7.4 Verify `game/spawn.ts` không có import từ `react` hoặc `render/`
+- [ ] 7.5 `npm run lint && npm run build` pass
+- [ ] 7.6 Smoke test: mob spawn đúng quantity ở stage 1, 10, 20 (kiểm tra scaling formula còn nguyên)
+- [ ] 7.7 Commit `refactor: extract spawn and elements into game layer`
+
+## 8. Checkpoint 7 — Tách game/systems/* lần lượt
+
+Mỗi sub-checkpoint là một commit riêng. Phải đảm bảo gameplay không thay đổi giữa từng sub-checkpoint.
+
+- [ ] 8.1 Tạo `src/game/systems/movement.ts`. Move logic player movement step (tìm trong `update()` đoạn xử lý `player.targetX/targetY`, `player.moving`, mob movement toward player). Signature: `tickMovement(state, dt, entities): void`. Commit.
+- [ ] 8.2 Tạo `src/game/systems/combat.ts`. Move logic basic attack + damage application + dead entity removal. Signature `tickCombat(state, dt, entities, particles, texts): void`. Commit.
+- [ ] 8.3 Tạo `src/game/systems/skills.ts`. Move skill cast + cooldown decrement + manaCost subtract. Commit.
+- [ ] 8.4 Tạo `src/game/systems/combo.ts`. Wire với `src/utils/comboHelper.ts` (giữ utils nguyên). Commit.
+- [ ] 8.5 Tạo `src/game/systems/companion.ts`. Move companion AI strike (dòng 2046-2101 trong loop). Commit.
+- [ ] 8.6 Tạo `src/game/systems/drops.ts`. Move drop pickup + equipment generation. Commit.
+- [ ] 8.7 Sau cả 6 commits, smoke test full stage 1 → stage 10 với 1 sect. Verify mọi system hoạt động.
+
+## 9. Checkpoint 8 — GameCanvas chỉ còn React glue
+
+- [ ] 9.1 Đếm dòng `wc -l src/components/GameCanvas.tsx` — phải ≤ 400
+- [ ] 9.2 Đọc lại file, verify chỉ còn: imports, props interface, hooks (useRef, useState), useEffect setup (sprite load, RAF schedule, resize, keydown), pointer handlers, return JSX
+- [ ] 9.3 Nếu vẫn còn business logic, identify và move tiếp
+- [ ] 9.4 `npm run lint && npm run build` pass
+- [ ] 9.5 Commit `refactor: GameCanvas reduced to React glue (<400 lines)`
+
+## 10. Checkpoint 9 — Documentation & boundary verification
+
+- [ ] 10.1 Sửa `README.md`: thay phần Gemini banner và "Set the GEMINI_API_KEY..." bằng disclaimer trung thực: endpoint `/api/encounter` hiện trả về local data
+- [ ] 10.2 Sửa `server.ts`: comment ở `/api/encounter` handler ghi rõ "Returns locally pre-configured encounters. Real Gemini integration not yet wired — insertion point marked TODO."
+- [ ] 10.3 Sửa `AGENT.md` section 0 TL;DR để phản ánh:
+  - `AI: not yet integrated — /api/encounter returns local pre-configured data`
+  - Cấu trúc thư mục mới (render/, game/, game/systems/)
+- [ ] 10.4 Thêm note disclosure trong `README.md` HOẶC `AGENT.md` về `MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API` flag trong metadata.json (forward declaration vs current impl)
+- [ ] 10.5 Boundary check manual: `grep -r "from 'react'" src/render/ src/game/` zero matches, `grep -rE "import.*from.*'.*render" src/game/` zero matches, `grep -rE "getContext\|CanvasRenderingContext2D" src/game/` zero matches
+- [ ] 10.6 Commit `docs: align README, server, AGENT.md with current implementation`
+
+## 11. Final Verification
+
+- [ ] 11.1 `npm run lint && npm run build` pass
+- [ ] 11.2 Smoke test full: 2 sects (1 melee Thiếu Lâm, 1 ranged Đường Môn), each play stage 1 → 10
+- [ ] 11.3 So sánh FPS với screenshot pre-cleanup — phải tương đương (±5%)
+- [ ] 11.4 Compare 5 screenshot mốc với pre-cleanup — visual parity
+- [ ] 11.5 Verify save/load: clear save, chơi 1 stage, refresh, click "tiếp tục" → state khôi phục đúng (đây là behavior cũ, phase này không thay đổi)
+- [ ] 11.6 `npm ls` không list `@google/genai`, `pixi.js`, `@pixi/react`, `pixi-filters`
+- [ ] 11.7 `wc -l src/components/GameCanvas.tsx` ≤ 400
+- [ ] 11.8 Tag commit cuối là `post-cleanup-and-split`
+- [ ] 11.9 Tạo PR / merge vào main
+
+## 12. Post-merge
+
+- [ ] 12.1 Update `AGENT.md` Section "Cấu Trúc Thư Mục" với layout mới (render/, game/, game/systems/) và quy tắc import boundary 3-layer
+- [ ] 12.2 Verify `openspec` change archive workflow (sẽ chạy `/opsx:archive` khi all tasks done)
