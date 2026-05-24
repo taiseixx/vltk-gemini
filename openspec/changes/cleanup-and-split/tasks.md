@@ -33,12 +33,12 @@
 
 ## 4. Checkpoint 3 — Tách render/spriteLoader
 
-- [ ] 4.1 Tạo `src/render/spriteLoader.ts`. Định nghĩa type `SpriteManifest` mô tả danh sách image cần load (key, src path, filter type, tolerance)
-- [ ] 4.2 Export hàm `loadAllSprites(manifest, onProgress): Promise<Record<string, CanvasImageSource>>` — internally dùng `getCachedFilteredImage` nhưng wrap trong Promise
-- [ ] 4.3 Trong `GameCanvas.tsx`, replace `useEffect` loader (dòng 308-412) bằng một useEffect ngắn: build manifest, gọi `loadAllSprites`, set vào refs khi resolve
-- [ ] 4.4 Giữ counter `loadedResourcesRef.current` để loading screen vẫn hoạt động (hoặc đổi sang progress state — giữ counter cho phase này để tránh thay đổi behavior)
-- [ ] 4.5 `npm run lint && npm run build` pass
-- [ ] 4.6 Smoke test: loading screen vẫn hiển thị progress, vào game không stuck
+- [x] 4.1 Tạo `src/render/spriteLoader.ts`. Định nghĩa type `SpriteManifest` mô tả danh sách image cần load (key, src path, filter type, tolerance)
+- [x] 4.2 Export hàm `loadAllSprites(manifest, onProgress): Promise<Record<string, CanvasImageSource>>` — internally dùng `getCachedFilteredImage` nhưng wrap trong Promise
+- [x] 4.3 Trong `GameCanvas.tsx`, replace `useEffect` loader (dòng 308-412) bằng một useEffect ngắn: build manifest, gọi `loadAllSprites`, set vào refs khi resolve
+- [x] 4.4 Giữ counter `loadedResourcesRef.current` để loading screen vẫn hoạt động — done via `onProgress` callback. `incrementLoaded` helper đã xóa vì không còn dùng.
+- [x] 4.5 `npm run lint && npm run build` pass
+- [x] 4.6 Smoke test: loading screen vẫn hiển thị progress, vào game không stuck — user confirmed loading behavior identical to pre-refactor (overlap bug is pre-existing, not regression). Eager ref assignment via `onSpriteLoaded` callback preserves exact original behavior.
 - [ ] 4.7 Commit `refactor: extract sprite loader into render layer`
 
 ## 5. Checkpoint 4 — Tách render/character (drawHuman)

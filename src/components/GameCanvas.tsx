@@ -55,7 +55,7 @@ import tyCompImg from "../assets/images/companion_ty_1779612487644.png";
 import tvCompImg from "../assets/images/companion_tv_1779612509432.png";
 import tnCompImg from "../assets/images/companion_tn_1779612527728.png";
 
-import { getCachedFilteredImage } from "../render/imageCache";
+import { loadAllSprites, SpriteManifest } from "../render/spriteLoader";
 
 interface Props {
   gameState: GameState;
@@ -125,74 +125,9 @@ export default function GameCanvas({
   const TOTAL_RESOURCES = 31;
   const loadedResourcesRef = useRef(0);
 
-  const incrementLoaded = () => {
-    loadedResourcesRef.current++;
-  };
-
   useEffect(() => {
-    // 1. Standalone load for raw background patterns
-    const grass = new Image();
-    grass.onload = () => {
-      grassImgRef.current = grass;
-      incrementLoaded();
-    };
-    grass.src = grassImg;
-
-    const stone = new Image();
-    stone.onload = () => {
-      stoneImgRef.current = stone;
-      incrementLoaded();
-    };
-    stone.src = stoneImg;
-
-    // 2. Load and cache environmental items (black background removed)
-    getCachedFilteredImage(barricadeImg, "black", 55, (img) => {
-      barricadeImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(treeImg, "black", 55, (img) => {
-      treeImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(catapultImg, "black", 55, (img) => {
-      catapultImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(flagImg, "black", 55, (img) => {
-      flagImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(lanternImg, "black", 55, (img) => {
-      lanternImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(fenceImg, "black", 55, (img) => {
-      fenceImgRef.current = img;
-      incrementLoaded();
-    });
-
-    // 3. Load and cache player/mobs base sprites
-    getCachedFilteredImage(wuxiaPlayerImg, "character", 45, (img) => {
-      playerSpriteRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(wuxiaMobImg, "character", 45, (img) => {
-      mobSpriteRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(wuxiaBossImg, "character", 45, (img) => {
-      bossSpriteRef.current = img;
-      incrementLoaded();
-    });
-
-    // 4. Load & Cache 10 Sect Player Sprites
+    // Build the full sprite manifest. Counter logic preserved via onProgress
+    // to keep loading-screen behavior unchanged.
     const sectPlayerImgs: Record<string, string> = {
       sl: slPlayerImg,
       vd: vdPlayerImg,
@@ -206,14 +141,6 @@ export default function GameCanvas({
       tn: tnPlayerImg,
     };
 
-    Object.entries(sectPlayerImgs).forEach(([sect, src]) => {
-      getCachedFilteredImage(src, "character", 45, (img) => {
-        playerSectSpritesRef.current[sect] = img;
-        incrementLoaded();
-      });
-    });
-
-    // 5. Load & Cache 10 Sect Companion Sprites
     const sectCompImgs: Record<string, string> = {
       sl: slCompImg,
       vd: vdCompImg,
@@ -227,12 +154,91 @@ export default function GameCanvas({
       tn: tnCompImg,
     };
 
-    Object.entries(sectCompImgs).forEach(([sect, src]) => {
-      getCachedFilteredImage(src, "character", 45, (img) => {
-        companionSectSpritesRef.current[sect] = img;
-        incrementLoaded();
-      });
-    });
+    const manifest: SpriteManifest = [
+      // Raw background patterns (used by ctx.createPattern, need HTMLImageElement)
+      { key: "grass", src: grassImg, filter: "none" },
+      { key: "stone", src: stoneImg, filter: "none" },
+      // Environmental items: black background removed
+      { key: "barricade", src: barricadeImg, filter: "black", tolerance: 55 },
+      { key: "tree", src: treeImg, filter: "black", tolerance: 55 },
+      { key: "catapult", src: catapultImg, filter: "black", tolerance: 55 },
+      { key: "flag", src: flagImg, filter: "black", tolerance: 55 },
+      { key: "lantern", src: lanternImg, filter: "black", tolerance: 55 },
+      { key: "fence", src: fenceImg, filter: "black", tolerance: 55 },
+      // Base character sprites
+      { key: "player", src: wuxiaPlayerImg, filter: "character", tolerance: 45 },
+      { key: "mob", src: wuxiaMobImg, filter: "character", tolerance: 45 },
+      { key: "boss", src: wuxiaBossImg, filter: "character", tolerance: 45 },
+      // 10 sect player sprites
+      ...Object.entries(sectPlayerImgs).map(([sect, src]) => ({
+        key: `player_${sect}`,
+        src,
+        filter: "character" as const,
+        tolerance: 45,
+      })),
+      // 10 sect companion sprites
+      ...Object.entries(sectCompImgs).map(([sect, src]) => ({
+        key: `comp_${sect}`,
+        src,
+        filter: "character" as const,
+        tolerance: 45,
+      })),
+    ];
+
+    loadAllSprites(
+      manifest,
+      (loaded) => {
+        loadedResourcesRef.current = loaded;
+      },
+      (key, img) => {
+        // Eager assignment: each sprite lands in its ref the instant it resolves,
+        // matching the pre-refactor callback-style loader. This is important
+        // because the render loop reads refs as soon as the loaded-resources
+        // counter hits TOTAL_RESOURCES — refs MUST be ready by then.
+        switch (key) {
+          case "grass":
+            grassImgRef.current = img as HTMLImageElement;
+            break;
+          case "stone":
+            stoneImgRef.current = img as HTMLImageElement;
+            break;
+          case "barricade":
+            barricadeImgRef.current = img;
+            break;
+          case "tree":
+            treeImgRef.current = img;
+            break;
+          case "catapult":
+            catapultImgRef.current = img;
+            break;
+          case "flag":
+            flagImgRef.current = img;
+            break;
+          case "lantern":
+            lanternImgRef.current = img;
+            break;
+          case "fence":
+            fenceImgRef.current = img;
+            break;
+          case "player":
+            playerSpriteRef.current = img;
+            break;
+          case "mob":
+            mobSpriteRef.current = img;
+            break;
+          case "boss":
+            bossSpriteRef.current = img;
+            break;
+          default:
+            if (key.startsWith("player_")) {
+              playerSectSpritesRef.current[key.slice("player_".length)] = img;
+            } else if (key.startsWith("comp_")) {
+              companionSectSpritesRef.current[key.slice("comp_".length)] = img;
+            }
+            break;
+        }
+      }
+    );
   }, []);
 
   const setStateAsync = (updater: (prev: GameState | null) => GameState | null) => {
