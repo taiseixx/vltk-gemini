@@ -61,6 +61,7 @@ import { drawLoadingScreen, drawParticles, drawFloatingTexts } from "../render/w
 import { getSectIdFromColor, getSectElement, getElementalMultipliers } from "../game/elements";
 import { getBossCount, getMobsTotal, spawnWave as spawnWavePure, spawnSubBosses as spawnSubBossesPure, spawnFinalBosses as spawnFinalBossesPure } from "../game/spawn";
 import { tickCompanion } from "../game/systems/companion";
+import { tickMobAI } from "../game/systems/movement";
 
 interface Props {
   gameState: GameState;
@@ -492,30 +493,7 @@ export default function GameCanvas({
       }
 
       // Enemy AI
-      entitiesRef.current.forEach((e) => {
-        e.atkCd -= dt;
-        const d = Math.hypot(e.x - p.x, e.y - p.y);
-        if (d > p.radius + e.size + 5) {
-          e.x += ((p.x - e.x) / d) * e.speed * dt;
-          e.y += ((p.y - e.y) / d) * e.speed * dt;
-        } else if (e.atkCd <= 0) {
-          e.atkCd = 1.5;
-          const dmg = Math.max(1, e.atk - p.currentStats.con);
-          p.hp -= dmg;
-          textsRef.current.push({
-            id: Math.random(),
-            x: p.x,
-            y: p.y - 30,
-            text: `-${Math.floor(dmg)}`,
-            color: "#e74c3c",
-            life: 1,
-          });
-          if (p.hp <= 0) {
-            p.dead = true;
-            p.atkCd = 3;
-          }
-        }
-      });
+      tickMobAI(p, dt, entitiesRef.current, textsRef.current);
 
       // Skill Cooldowns & Auto-cast
       let firedSkillIdx = -1;
