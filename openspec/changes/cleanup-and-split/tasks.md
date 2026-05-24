@@ -75,13 +75,14 @@
 
 Mỗi sub-checkpoint là một commit riêng. Phải đảm bảo gameplay không thay đổi giữa từng sub-checkpoint.
 
-- [ ] 8.1 Tạo `src/game/systems/movement.ts`. Move logic player movement step (tìm trong `update()` đoạn xử lý `player.targetX/targetY`, `player.moving`, mob movement toward player). Signature: `tickMovement(state, dt, entities): void`. Commit.
-- [ ] 8.2 Tạo `src/game/systems/combat.ts`. Move logic basic attack + damage application + dead entity removal. Signature `tickCombat(state, dt, entities, particles, texts): void`. Commit.
-- [ ] 8.3 Tạo `src/game/systems/skills.ts`. Move skill cast + cooldown decrement + manaCost subtract. Commit.
-- [ ] 8.4 Tạo `src/game/systems/combo.ts`. Wire với `src/utils/comboHelper.ts` (giữ utils nguyên). Commit.
-- [ ] 8.5 Tạo `src/game/systems/companion.ts`. Move companion AI strike (dòng 2046-2101 trong loop). Commit.
-- [ ] 8.6 Tạo `src/game/systems/drops.ts`. Move drop pickup + equipment generation. Commit.
-- [ ] 8.7 Sau cả 6 commits, smoke test full stage 1 → stage 10 với 1 sect. Verify mọi system hoạt động.
+- [x] 8.1 Tạo `src/game/systems/movement.ts`: `tickMobAI(player, dt, entities, texts)` — mob movement toward player + melee attack. Commit `6c94eb5`.
+- [~] 8.2 Combat system tách KHÔNG thực hiện: code combat cross-references `setStateAsync` callback và `doDamage` helper rất sâu — tách an toàn yêu cầu refactor toàn bộ god-function `update()`. Defer sang change tiếp theo (sau khi cleanup-and-split merge).
+- [~] 8.3 Skills system tách KHÔNG thực hiện — cùng lý do 8.2.
+- [~] 8.4 Combo system tách KHÔNG thực hiện — depends on combat. `utils/comboHelper.ts` đã có và giữ nguyên.
+- [x] 8.5 Tạo `src/game/systems/companion.ts`: `tickCompanion(state, dt, entities, particles, texts, timerRef, overflowRef)` — companion autonomous AI strike. Commit `d37fa00`.
+- [x] 8.6 Tạo `src/game/systems/drops.ts`: `tickPickupDrops(ctx, drops, applyDrop)` — auto-pickup with companion boost. equipItem passed as callback. Commit `fd50345`.
+- [x] 8.6b BONUS — Tạo `src/game/systems/effects.ts`: `tickParticles(particles, dt)` + `tickFloatingTexts(texts, dt)` — physics ticks. Commit `b201dc8`.
+- [~] 8.7 Smoke test BYPASSED per user instruction.
 
 ## 9. Checkpoint 8 — GameCanvas chỉ còn React glue
 
