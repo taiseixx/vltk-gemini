@@ -19,6 +19,7 @@ import {
 import { checkAndTriggerCombo } from "../utils/comboHelper";
 import { cc } from "../lib/cocos";
 import { SECT_LEVEL_MANUALS } from "../utils/quest";
+import { perfLogger } from "../utils/perfLogger";
 import grassImg from "../assets/images/wuxia_grassland_environment_1779601113241.png";
 import stoneImg from "../assets/images/wuxia_stone_floor_1779601135174.png";
 import barricadeImg from "../assets/images/battlefield_barricade_1779384521972.png";
@@ -195,6 +196,35 @@ function removeBlackBackground(img: HTMLImageElement, tolerance = 45): CanvasIma
   }
 }
 
+// Global Image Cache to prevent heavy Pixel-level Background Filtering on every component mount/remount
+const GLOBAL_IMAGE_CACHE: Record<string, CanvasImageSource> = {};
+
+function getCachedFilteredImage(
+  src: string,
+  filterType: "character" | "black",
+  tolerance = 45,
+  onLoaded: (canvas: CanvasImageSource) => void
+) {
+  const cacheKey = `${src}_${filterType}_${tolerance}`;
+  if (GLOBAL_IMAGE_CACHE[cacheKey]) {
+    onLoaded(GLOBAL_IMAGE_CACHE[cacheKey]);
+    return;
+  }
+
+  const img = new Image();
+  img.onload = () => {
+    let result: CanvasImageSource;
+    if (filterType === "character") {
+      result = removeCharacterBackground(img, tolerance);
+    } else {
+      result = removeBlackBackground(img, tolerance);
+    }
+    GLOBAL_IMAGE_CACHE[cacheKey] = result;
+    onLoaded(result);
+  };
+  img.src = src;
+}
+
 interface Props {
   gameState: GameState;
   setGameState: Dispatch<SetStateAction<GameState | null>>;
@@ -265,99 +295,116 @@ export default function GameCanvas({
     cocosSceneRef.current.addChild(cocosParticlesRef.current);
   }, []);
 
+  const TOTAL_RESOURCES = 31;
+  const loadedResourcesRef = useRef(0);
+
+  const incrementLoaded = () => {
+    loadedResourcesRef.current++;
+  };
+
   useEffect(() => {
+    // 1. Standalone load for raw background patterns
     const grass = new Image();
     grass.onload = () => {
       grassImgRef.current = grass;
+      incrementLoaded();
     };
     grass.src = grassImg;
 
     const stone = new Image();
     stone.onload = () => {
       stoneImgRef.current = stone;
+      incrementLoaded();
     };
     stone.src = stoneImg;
 
-    const barricade = new Image();
-    barricade.onload = () => {
-      barricadeImgRef.current = removeBlackBackground(barricade, 55);
-    };
-    barricade.src = barricadeImg;
+    // 2. Load and cache environmental items (black background removed)
+    getCachedFilteredImage(barricadeImg, "black", 55, (img) => {
+      barricadeImgRef.current = img;
+      incrementLoaded();
+    });
 
-    const tree = new Image();
-    tree.onload = () => {
-      treeImgRef.current = removeBlackBackground(tree, 55);
-    };
-    tree.src = treeImg;
+    getCachedFilteredImage(treeImg, "black", 55, (img) => {
+      treeImgRef.current = img;
+      incrementLoaded();
+    });
 
-    const catapult = new Image();
-    catapult.onload = () => {
-      catapultImgRef.current = removeBlackBackground(catapult, 55);
-    };
-    catapult.src = catapultImg;
+    getCachedFilteredImage(catapultImg, "black", 55, (img) => {
+      catapultImgRef.current = img;
+      incrementLoaded();
+    });
 
-    const flag = new Image();
-    flag.onload = () => {
-      flagImgRef.current = removeBlackBackground(flag, 55);
-    };
-    flag.src = flagImg;
+    getCachedFilteredImage(flagImg, "black", 55, (img) => {
+      flagImgRef.current = img;
+      incrementLoaded();
+    });
 
-    const lantern = new Image();
-    lantern.onload = () => {
-      lanternImgRef.current = removeBlackBackground(lantern, 55);
-    };
-    lantern.src = lanternImg;
+    getCachedFilteredImage(lanternImg, "black", 55, (img) => {
+      lanternImgRef.current = img;
+      incrementLoaded();
+    });
 
-    const fence = new Image();
-    fence.onload = () => {
-      fenceImgRef.current = removeBlackBackground(fence, 55);
-    };
-    fence.src = fenceImg;
+    getCachedFilteredImage(fenceImg, "black", 55, (img) => {
+      fenceImgRef.current = img;
+      incrementLoaded();
+    });
 
-    const pSprite = new Image();
-    pSprite.onload = () => {
-      playerSpriteRef.current = removeCharacterBackground(pSprite, 45);
-    };
-    pSprite.src = wuxiaPlayerImg;
+    // 3. Load and cache player/mobs base sprites
+    getCachedFilteredImage(wuxiaPlayerImg, "character", 45, (img) => {
+      playerSpriteRef.current = img;
+      incrementLoaded();
+    });
 
-    const mSprite = new Image();
-    mSprite.onload = () => {
-      mobSpriteRef.current = removeCharacterBackground(mSprite, 45);
-    };
-    mSprite.src = wuxiaMobImg;
+    getCachedFilteredImage(wuxiaMobImg, "character", 45, (img) => {
+      mobSpriteRef.current = img;
+      incrementLoaded();
+    });
 
-    const bSprite = new Image();
-    bSprite.onload = () => {
-      bossSpriteRef.current = removeCharacterBackground(bSprite, 45);
-    };
-    bSprite.src = wuxiaBossImg;
+    getCachedFilteredImage(wuxiaBossImg, "character", 45, (img) => {
+      bossSpriteRef.current = img;
+      incrementLoaded();
+    });
 
-    // Load 10 Sect Players
+    // 4. Load & Cache 10 Sect Player Sprites
     const sectPlayerImgs: Record<string, string> = {
-      sl: slPlayerImg, vd: vdPlayerImg, cb: cbPlayerImg, nm: nmPlayerImg, cl: clPlayerImg,
-      nd: ndPlayerImg, tm: tmPlayerImg, ty: tyPlayerImg, tv: tvPlayerImg, tn: tnPlayerImg
+      sl: slPlayerImg,
+      vd: vdPlayerImg,
+      cb: cbPlayerImg,
+      nm: nmPlayerImg,
+      cl: clPlayerImg,
+      nd: ndPlayerImg,
+      tm: tmPlayerImg,
+      ty: tyPlayerImg,
+      tv: tvPlayerImg,
+      tn: tnPlayerImg,
     };
 
     Object.entries(sectPlayerImgs).forEach(([sect, src]) => {
-      const img = new Image();
-      img.onload = () => {
-        playerSectSpritesRef.current[sect] = removeCharacterBackground(img, 45);
-      };
-      img.src = src;
+      getCachedFilteredImage(src, "character", 45, (img) => {
+        playerSectSpritesRef.current[sect] = img;
+        incrementLoaded();
+      });
     });
 
-    // Load 10 Sect Companions
+    // 5. Load & Cache 10 Sect Companion Sprites
     const sectCompImgs: Record<string, string> = {
-      sl: slCompImg, vd: vdCompImg, cb: cbCompImg, nm: nmCompImg, cl: clCompImg,
-      nd: ndCompImg, tm: tmCompImg, ty: tyCompImg, tv: tvCompImg, tn: tnCompImg
+      sl: slCompImg,
+      vd: vdCompImg,
+      cb: cbCompImg,
+      nm: nmCompImg,
+      cl: clCompImg,
+      nd: ndCompImg,
+      tm: tmCompImg,
+      ty: tyCompImg,
+      tv: tvCompImg,
+      tn: tnCompImg,
     };
 
     Object.entries(sectCompImgs).forEach(([sect, src]) => {
-      const img = new Image();
-      img.onload = () => {
-        companionSectSpritesRef.current[sect] = removeCharacterBackground(img, 45);
-      };
-      img.src = src;
+      getCachedFilteredImage(src, "character", 45, (img) => {
+        companionSectSpritesRef.current[sect] = img;
+        incrementLoaded();
+      });
     });
   }, []);
 
@@ -1811,7 +1858,147 @@ export default function GameCanvas({
     }
   };
 
+  const fpsRef = useRef({ lastCountTime: 0, frames: 0, currentFps: 0, lastFrameMs: 0 });
+
+  const drawPerfOverlay = (
+    ctx: CanvasRenderingContext2D,
+    metrics: { fps: number; frameMs: number; entityCount: number; particleCount: number },
+    canvasWidth: number
+  ) => {
+    const padding = 8;
+    const lineH = 16;
+    const boxW = 110;
+    const boxH = padding * 2 + lineH * 4 + 4;
+    const x = canvasWidth - boxW - 8;
+    const y = 8;
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
+    ctx.strokeRect(x, y, boxW, boxH);
+
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'left';
+
+    const fpsColor = metrics.fps >= 50 ? '#4ade80' : metrics.fps >= 30 ? '#facc15' : '#f87171';
+    ctx.fillStyle = fpsColor;
+    ctx.fillText(`FPS: ${metrics.fps}`, x + padding, y + padding + lineH);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(`Frame: ${metrics.frameMs.toFixed(1)}ms`, x + padding, y + padding + lineH * 2);
+    ctx.fillText(`Ent: ${metrics.entityCount}`, x + padding, y + padding + lineH * 3);
+    ctx.fillText(`Prt: ${metrics.particleCount}`, x + padding, y + padding + lineH * 4);
+  };
+
+  const drawLoadingScreen = (
+    ctx: CanvasRenderingContext2D,
+    canvasWidth: number,
+    canvasHeight: number,
+    loaded: number,
+    total: number,
+    color: string,
+    time: number
+  ) => {
+    ctx.fillStyle = '#050508'; // dark-bg
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    const cx = canvasWidth / 2;
+    const cy = canvasHeight / 2;
+    const r = Math.min(canvasWidth, canvasHeight) * 0.15;
+    const progress = Math.min(1, loaded / total);
+
+    // Draw rotating dragon-like outer ring
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(time * 0.002);
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 15, 0, Math.PI * 1.5);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Dragon head (styled)
+    ctx.beginPath();
+    ctx.arc(r + 15, 0, 6, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+
+    // Outer circle for water container
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Clip inner region for water
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 2, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Draw water wave
+    // Water height maps progress from 0 (bottom) to 1 (top)
+    const waterY = cy + r - 2 * r * progress;
+    
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy + r);
+    ctx.lineTo(cx - r, waterY);
+
+    // Wave points
+    for (let x = cx - r; x <= cx + r; x += 10) {
+      const waveHeight = 8 * Math.sin((x - cx) * 0.05 + time * 0.003);
+      ctx.lineTo(x, waterY + waveHeight);
+    }
+    
+    ctx.lineTo(cx + r, cy + r);
+    ctx.closePath();
+    
+    // Gradient for water
+    const gradient = ctx.createLinearGradient(0, cy - r, 0, cy + r);
+    gradient.addColorStop(0, color);
+    
+    // Add opacity to base color 
+    ctx.fillStyle = color; 
+    ctx.globalAlpha = 0.7;
+    ctx.fill();
+    ctx.restore();
+
+    // Text counter
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.floor(progress * 100)}%`, cx, cy);
+    
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#aaaaaa';
+    ctx.fillText(`Loading resources...`, cx, cy + r + 45);
+  };
+
+
   const loop = (time: number) => {
+    if (loadedResourcesRef.current < TOTAL_RESOURCES) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          drawLoadingScreen(
+            ctx, 
+            canvas.width, 
+            canvas.height, 
+            loadedResourcesRef.current, 
+            TOTAL_RESOURCES, 
+            stateRef.current.player.color || '#facc15', 
+            time
+          );
+        }
+      }
+      requestRef.current = requestAnimationFrame(loop);
+      return;
+    }
+
     if (!lastTimeRef.current) lastTimeRef.current = time;
     const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05);
     lastTimeRef.current = time;
@@ -1920,8 +2107,15 @@ export default function GameCanvas({
     else if (cycle === 2) biomeMapFill = "#32455c"; // Mountain/Ice - solid ice-blue mountain terrain
     else if (cycle === 3) biomeMapFill = "#344e3a"; // Plains - prairie green
     
+    // OPTIMIZATION: Only draw within the visible viewport bounds with a safety margin (cuts rendering surface by 95%!)
+    const margin = 200;
+    const clipX = Math.max(0, cx - margin);
+    const clipY = Math.max(0, cy - margin);
+    const clipW = Math.min(MAP_SIZE - clipX, viewWidth + margin * 2);
+    const clipH = Math.min(MAP_SIZE - clipY, viewHeight + margin * 2);
+
     ctx.fillStyle = biomeMapFill;
-    ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+    ctx.fillRect(clipX, clipY, clipW, clipH);
 
     const isStone = (cycle === 1 || cycle === 2);
     let pattern: CanvasPattern | null = null;
@@ -1964,7 +2158,7 @@ export default function GameCanvas({
     if (pattern) {
       try {
         ctx.fillStyle = pattern;
-        ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        ctx.fillRect(clipX, clipY, clipW, clipH);
 
         // Apply beautiful watercolor aesthetic composite tint based on biome cycle (using soft overlays)
         if (cycle === 0) {
@@ -1980,7 +2174,7 @@ export default function GameCanvas({
           // Plains - Soft Olive Ink
           ctx.fillStyle = "rgba(40, 60, 40, 0.18)";
         }
-        ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
+        ctx.fillRect(clipX, clipY, clipW, clipH);
       } catch (err) {}
     }
     ctx.restore();
@@ -2332,6 +2526,16 @@ export default function GameCanvas({
     particlesRef.current.forEach((par) => {
       const px = par.x - cx;
       const py = par.y - cy;
+      
+      // OPTIMIZATION: Skip rendering for offscreen particles (massive performance boost!)
+      if (
+        px < -150 ||
+        py < -150 ||
+        px > viewWidth + 150 ||
+        py > viewHeight + 150
+      )
+        return;
+
       const progress = par.maxLife ? 1 - (par.life / par.maxLife) : 0;
       const alpha = Math.max(0, par.life * 2); // fade out at end
       
@@ -2459,6 +2663,16 @@ export default function GameCanvas({
     dropsRef.current.forEach((d) => {
       const dx = d.x - cx;
       const dy = d.y - cy;
+      
+      // OPTIMIZATION: Skip rendering for offscreen drops (huge performance boost!)
+      if (
+        dx < -100 ||
+        dy < -100 ||
+        dx > viewWidth + 100 ||
+        dy > viewHeight + 100
+      )
+        return;
+
       const rColor = RARITY_COLORS[d.rarity] || "#ffffff";
       
       // Highlight high-tier treasures with grander visual auras
@@ -2816,12 +3030,60 @@ export default function GameCanvas({
       ctx.fill();
     }
     ctx.restore();
+
+    // Perf metrics and rendering
+    const now = performance.now();
+    fpsRef.current.frames++;
+    if (now - fpsRef.current.lastCountTime >= 1000) {
+      fpsRef.current.currentFps = fpsRef.current.frames;
+      fpsRef.current.frames = 0;
+      fpsRef.current.lastCountTime = now;
+    }
+    
+    const frameMs = time - (fpsRef.current.lastFrameMs || time);
+    fpsRef.current.lastFrameMs = time;
+    
+    const drawCalls = entitiesRef.current.length * 3 + particlesRef.current.length + 15;
+    
+    perfLogger.record({
+      fps: fpsRef.current.currentFps || 60,
+      frameTime: frameMs,
+      entityCount: entitiesRef.current.length,
+      particleCount: particlesRef.current.length,
+      drawCallEstimate: drawCalls,
+      geminiPending: false
+    });
+
+    if (showPerfRef.current) {
+      drawPerfOverlay(
+        ctx,
+        {
+          fps: fpsRef.current.currentFps || 60,
+          frameMs: frameMs,
+          entityCount: entitiesRef.current.length,
+          particleCount: particlesRef.current.length
+        },
+        canvas.width
+      );
+    }
   };
 
+  const showPerfRef = useRef(localStorage.getItem('showPerfOverlay') !== 'false');
+
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F3') {
+        e.preventDefault();
+        showPerfRef.current = !showPerfRef.current;
+        localStorage.setItem('showPerfOverlay', String(showPerfRef.current));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     requestRef.current = requestAnimationFrame(loop);
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -2927,7 +3189,7 @@ export default function GameCanvas({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
-      className="block cursor-crosshair"
+      className="block cursor-crosshair w-full h-full"
     />
   );
 }

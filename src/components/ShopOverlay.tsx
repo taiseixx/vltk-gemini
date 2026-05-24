@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { GameState, Rarity, EquipmentType, Equipment } from '../types';
+import { GameState, Rarity, EquipmentType, Equipment, MartialManual } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingBag, X, Heart, Sword, Shield, Gem, Star, Package, Award, Zap, Sparkles, Trash2, ShieldCheck, Trophy, Info } from 'lucide-react';
 import { RARITIES, RARITY_COLORS, EQUIPMENT_NAME_MAP } from '../constants';
 import { getItemCostMultiplier, formatGoldValue } from '../utils/economy';
+import { SECT_LEVEL_MANUALS, HERITAGE_BADGES } from '../utils/quest';
 // @ts-ignore
 import equipmentBg from '../assets/images/equipment_bg_1779367218827.png';
 // @ts-ignore
@@ -61,6 +62,75 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
     if (gameState.gold >= costLife) {
       setGameState(prev => prev ? { ...prev, gold: prev.gold - costLife, lives: prev.lives + 1, livesBought: (prev.livesBought || 0) + 1 } : null);
     }
+  };
+
+  const buyManual = (price: number, rarity: 'rare' | 'epic' | 'legendary') => {
+    if (gameState.gold < price) {
+      alert("⚠️ Không đủ Vàng bồi dưỡng để thăng học bí pháp!");
+      return;
+    }
+    
+    // Choose a random manual of `rarity` matching player's sectId, or generic
+    const sectId = gameState.player.sectId || 'sl';
+    const sectManuals = SECT_LEVEL_MANUALS[sectId] || [];
+    let template = sectManuals.find(m => m.rarity === rarity);
+    
+    // If not found in sect, roll from generic pool
+    if (!template) {
+      const genericTemplates = [
+        { name: 'Tây Vực Càn Khôn Đại Na Di Quyết', rarity: 'rare' as const, effect: 'Cơ duyên: +6% Kháng phòng thủ toàn diện', statBoost: { resBonus: 0.06 } },
+        { name: 'Giang Hồ Độc Cô Cửu Kiếm Tàn Di bản', rarity: 'epic' as const, effect: 'Cơ duyên: +5% Tỉ lệ Chí Mạng sát phạt', statBoost: { atkChance: 0.05 } },
+        { name: 'Cổ Bản Thần Hành Bách Biến Pháp Kỳ', rarity: 'rare' as const, effect: 'Cơ duyên: Rút ngắn 6% CD xuất pháp trận', statBoost: { atkSpeed: 0.06 } },
+        { name: 'Cửu Dương Thần Kinh Sơ Giải Quyết', rarity: 'legendary' as const, effect: 'Cơ duyên: +50 HP sinh khí & +25 MP nội nguyên', statBoost: { hpBonus: 50, mpBonus: 25 } },
+      ];
+      const matches = genericTemplates.filter(t => t.rarity === rarity);
+      if (matches.length > 0) {
+        template = matches[Math.floor(Math.random() * matches.length)];
+      } else {
+        template = genericTemplates[0]; // Fallback
+      }
+    }
+    
+    // Check if player already possesses this manual!
+    const alreadyHas = gameState.manuals?.some(m => m.name.includes(template!.name));
+    if (alreadyHas) {
+      alert(`Đạo hữu đã lĩnh ngộ môn tuyệt học [${template.name}] trước đó rồi! Thể chất đã bão hòa.`);
+      return;
+    }
+    
+    const HERITAGES: import('../types').HeritagePrefix[] = ['thất truyền', 'gia truyền', 'tông truyền', 'ân điển'];
+    const randomHeritage = HERITAGES[Math.floor(Math.random() * HERITAGES.length)];
+    let hasHeritage = false;
+    if (rarity === 'legendary') hasHeritage = true;
+    else if (rarity === 'epic' && Math.random() > 0.5) hasHeritage = true;
+    else if (rarity === 'rare' && Math.random() > 0.8) hasHeritage = true;
+
+    const newManual: MartialManual = {
+      id: `manual_shop_${sectId}_${Date.now()}`,
+      name: `📚 ${template.name}`,
+      sectId,
+      rarity,
+      heritage: hasHeritage ? randomHeritage : undefined,
+      effectName: template.effect.startsWith('Trợ lực') ? template.effect : `Cơ duyên: ${template.effect}`,
+      statBoost: template.statBoost,
+      icon: '📚',
+      equipped: false,
+      level: 1,
+      maxLevel: 5,
+      levelRequirement: 1
+    };
+    
+    setGameState(prev => {
+      if (!prev) return null;
+      const currentManuals = prev.manuals ? [...prev.manuals] : [];
+      return {
+        ...prev,
+        gold: Math.max(0, prev.gold - price),
+        manuals: [...currentManuals, newManual]
+      };
+    });
+    
+    alert(`👏 Chúc mừng đại hiệp đã ngộ đắc: [${template.name}]! Hộp chứa "Bí Kíp" đã ghi nhận chân truyền.`);
   };
 
   const buyItem = (price: number, item: Equipment, slot: keyof GameState['player']['equipment']) => {
@@ -233,12 +303,21 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
         const typeNames = EQUIPMENT_NAME_MAP[type];
         const name = typeNames ? (typeNames[rarity] || 'Kỳ Trân Thần Khí') : 'Kỳ Trân Thần Khí';
 
+        const HERITAGES: import('../types').HeritagePrefix[] = ['thất truyền', 'gia truyền', 'tông truyền', 'ân điển'];
+        let hasHeritage = false;
+        if (['pink', 'crimson', 'gold_rarity'].includes(rarity)) hasHeritage = true;
+        else if (rarity === 'emerald' && Math.random() > 0.4) hasHeritage = true;
+        else if (rarity === 'legendary' && Math.random() > 0.7) hasHeritage = true;
+        
+        const heritagePrefix = hasHeritage ? HERITAGES[Math.floor(Math.random() * HERITAGES.length)] : undefined;
+
         results.push({
-           name,
+           name: hasHeritage ? `💎 [${heritagePrefix?.toUpperCase()}] ` + name : name,
            type,
            rarity,
            power,
-           tier
+           tier,
+           heritage: heritagePrefix
         });
      }
 
@@ -384,7 +463,7 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
              onClick={() => setActiveTab('items')} 
              className={`flex-1 py-3 text-xs md:text-sm font-bold font-serif tracking-widest uppercase transition-colors relative ${activeTab === 'items' ? 'text-amber-400' : 'text-gray-500 hover:text-gray-300'}`}
            >
-             Thần Khí (Cố Định)
+             Tàng Kinh Các (Bí Kíp)
              {activeTab === 'items' && <motion.div layoutId="shopTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400" />}
            </button>
            <button 
@@ -495,8 +574,63 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
 
            {activeTab === 'items' && (
              <div>
-               <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Thần Khí Truyền Thuyết Võ Lâm</h4>
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 font-serif">
+               <h4 className="text-gray-500 text-[9px] md:text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Mật Bản Tuyệt Học Tông Môn</h4>
+                <p className="text-gray-400 text-xs mb-5 font-sans leading-relaxed">
+                  Tại Tàng Kinh Các, đạo hữu có thể dùng Ngân Lượng bồi dưỡng chiêu mộ cổ bản bí kíp khẩu quyết chân truyền tương ứng với hệ thống môn phái hiện tại. Kích hoạt chân khí để tu luyện cường hóa thuộc tính vĩnh viễn!
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-serif mb-6">
+                   {/* Rare Secret Book */}
+                   <button 
+                     onClick={() => buyManual(Math.floor(1200 * priceMultiplier), 'rare')} 
+                     className="p-5 border border-blue-900/40 bg-blue-950/5 hover:border-blue-500 rounded-xl flex flex-col items-center justify-between gap-3 group transition-all cursor-pointer text-center w-full relative overflow-hidden min-h-[220px]"
+                   >
+                     <div className="absolute inset-0 bg-gradient-to-b from-blue-500/5 to-transparent pointer-events-none" />
+                     <div className="w-16 h-16 rounded border border-blue-500/20 bg-blue-950/40 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform relative">
+                       📖
+                       <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white font-mono text-[9px] px-1.5 py-0.2 rounded font-black">RARE</div>
+                     </div>
+                     <div>
+                       <span className="text-blue-400 font-bold uppercase text-[11.5px] tracking-wider block mb-1">Duyên Cơ Thần Thư</span>
+                       <span className="text-gray-400 text-[10px] font-sans leading-snug block px-2">Nhận ngẫu nhiên sơ cấp tâm pháp võ học phái môn hệ phái hiện tại của đại hiệp.</span>
+                     </div>
+                     <span className="text-gold text-xs font-serif border border-gold/30 px-3 py-1 rounded bg-black/50 font-bold mt-2">{formatGoldValue(Math.floor(1200 * priceMultiplier))}</span>
+                   </button>
+                   
+                   {/* Epic Secret Book */}
+                   <button 
+                     onClick={() => buyManual(Math.floor(2500 * priceMultiplier), 'epic')} 
+                     className="p-5 border border-[#FF00FF]/40 bg-purple-950/5 hover:border-[#FF00FF] rounded-xl flex flex-col items-center justify-between gap-3 group transition-all cursor-pointer text-center w-full relative overflow-hidden min-h-[220px]"
+                   >
+                     <div className="absolute inset-0 bg-gradient-to-b from-[#FF00FF]/5 to-transparent pointer-events-none" />
+                     <div className="w-16 h-16 rounded border-[#FF00FF]/25 bg-purple-950/40 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform relative">
+                       🔮
+                       <div className="absolute -bottom-1 -right-1 bg-purple-600 text-white font-mono text-[9px] px-1.5 py-0.2 rounded font-black">EPIC</div>
+                     </div>
+                     <div>
+                       <span className="text-purple-400 font-bold uppercase text-[11.5px] tracking-wider block mb-1">Tông Môn Chân Truyền</span>
+                       <span className="text-gray-400 text-[10px] font-sans leading-snug block px-2">Lĩnh ngộ thượng thừa công pháp huyền môn, gia tăng trực tiếp thuộc tính sát phạt vượt trội.</span>
+                     </div>
+                     <span className="text-gold text-xs font-serif border border-gold/30 px-3 py-1 rounded bg-black/50 font-bold mt-2">{formatGoldValue(Math.floor(2500 * priceMultiplier))}</span>
+                   </button>
+                   
+                   {/* Legendary Secret Book */}
+                   <button 
+                     onClick={() => buyManual(Math.floor(5000 * priceMultiplier), 'legendary')} 
+                     className="p-5 border border-amber-500/40 bg-amber-950/5 hover:border-amber-400 rounded-xl flex flex-col items-center justify-between gap-3 group transition-all cursor-pointer text-center w-full relative overflow-hidden min-h-[220px] shadow-[0_0_15px_rgba(245,158,11,0.05)]"
+                   >
+                     <div className="absolute inset-0 bg-gradient-to-b from-amber-500/5 to-transparent pointer-events-none" />
+                     <div className="w-16 h-16 rounded border-amber-500/25 bg-amber-950/40 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform relative">
+                       👑
+                       <div className="absolute -bottom-1 -right-1 bg-amber-500 text-black font-mono text-[9px] px-1.5 py-0.2 rounded font-black">LEGENDARY</div>
+                     </div>
+                     <div>
+                       <span className="text-amber-400 font-bold uppercase text-[11.5px] tracking-wider block mb-1">Thần Minh Địa Thư</span>
+                       <span className="text-gray-400 text-[10px] font-sans leading-snug block px-2">Tuyệt phẩm giang hồ thất bản truyền kỳ, khai quang tâm nhãn phá nát võ lâm vạn dặm.</span>
+                     </div>
+                     <span className="text-gold text-xs font-serif border border-[#d4af37]/50 px-3 py-1 rounded bg-black/70 shadow-[0_0_8px_rgba(212,175,55,0.2)] font-bold mt-2">{formatGoldValue(Math.floor(5000 * priceMultiplier))}</span>
+                   </button>
+                </div>
+               <div className="grid hidden grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 font-serif">
               {/* Weapon */}
               <button 
                 onClick={() => buyItem(Math.floor(2500 * priceMultiplier), { name: 'Ỷ Thiên Thần Kiếm', type: 'weapon', rarity: 'pink', power: 20, tier: 1 }, 'weapon')} 
@@ -648,7 +782,18 @@ export default function ShopOverlay({ gameState, setGameState, onClose }: Props)
                                  {getTierBadge(item.tier)}
                                </div>
 
-                               <span className="text-[10px] font-mono opacity-80 uppercase font-bold text-gray-450 w-full text-left">
+                               {/* Heritage Level Hán Tự Badge */}
+                               {item.heritage && HERITAGE_BADGES[item.heritage] && (
+                                 <div 
+                                   className={`absolute top-1 left-1.5 text-[8.5px] font-black font-serif px-1.5 py-0.5 rounded z-20 select-none border border-white/10 shadow-lg leading-none
+                                     ${HERITAGE_BADGES[item.heritage].bg} ${HERITAGE_BADGES[item.heritage].textCol}`}
+                                   title={`Truyền Thừa: ${HERITAGE_BADGES[item.heritage].label}`}
+                                 >
+                                   {HERITAGE_BADGES[item.heritage].text}
+                                 </div>
+                               )}
+
+                               <span className="text-[10px] font-mono opacity-80 uppercase font-bold text-gray-450 w-full text-left mt-0.5 ml-1">
                                   {item.type === 'weapon' ? '🗡️' : item.type === 'armor' ? '🛡️' : item.type === 'accessory' ? '💍' : item.type === 'special' ? '🔮' : item.type === 'horse' ? '🐴' : item.type === 'cloak' ? '🧥' : item.type === 'seal' ? '🈶' : '🚩'} {item.type.substring(0, 4)}
                                </span>
 

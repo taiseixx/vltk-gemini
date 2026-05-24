@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { GameState, Equipment, Rarity, MartialManual } from '../types';
+import { GameState, Equipment, Rarity, MartialManual, HeritagePrefix, Quest } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { RARITY_COLORS, SECTS } from '../constants';
+import { HERITAGE_BADGES } from '../utils/quest';
 // @ts-ignore
 import equipmentBg from '../assets/images/equipment_bg_1779367218827.png';
 // @ts-ignore
@@ -252,6 +253,17 @@ export default function Sidebar({ gameState, setGameState, onAvatarClick, addNot
               <div className="absolute inset-[2.5px] rounded bg-gray-900 z-10 pointer-events-none"
                    style={{ boxShadow: `inset 0 0 10px ${rarityColor}40` }} />
               
+              {/* Heritage Level Hán Tự Badge */}
+              {item.heritage && HERITAGE_BADGES[item.heritage] && (
+                <div 
+                  className={`absolute top-0.5 left-1 text-[8px] md:text-[9.5px] font-black font-serif px-1 py-0.5 rounded z-30 select-none scale-90 border border-white/10 shadow-lg leading-none
+                    ${HERITAGE_BADGES[item.heritage].bg} ${HERITAGE_BADGES[item.heritage].textCol}`}
+                  title={HERITAGE_BADGES[item.heritage].label}
+                >
+                  {HERITAGE_BADGES[item.heritage].text}
+                </div>
+              )}
+
               {/* Tier Level Display Badge */}
               <div className="absolute top-0.5 right-1.5 text-[8.5px] md:text-[10px] font-black font-serif z-30 select-none scale-90"
                    style={{ color: rarityColor, textShadow: `0 0 4px ${rarityColor}` }}>
@@ -397,11 +409,16 @@ export default function Sidebar({ gameState, setGameState, onAvatarClick, addNot
                           <div className="flex items-start justify-between gap-1.5">
                             <div className="flex items-center gap-1.5">
                               <span className="text-sm select-none">📚</span>
-                              <div>
+                              <div className="flex-1">
+                                {m.heritage && HERITAGE_BADGES[m.heritage] && (
+                                  <div className={`text-[7px] md:text-[8px] font-black font-serif px-1 py-0.5 rounded leading-none w-fit mb-0.5 inline-block border border-white/10 shadow-lg ${HERITAGE_BADGES[m.heritage].bg} ${HERITAGE_BADGES[m.heritage].textCol}`} title={`Kỳ vật: ${HERITAGE_BADGES[m.heritage].label}`}>
+                                    {HERITAGE_BADGES[m.heritage].text} {HERITAGE_BADGES[m.heritage].label}
+                                  </div>
+                                )}
                                 <h5 className="font-serif font-black text-[11px] tracking-tight line-clamp-1" style={{ color: rColor }}>
                                   {m.name.replace('📚 ', '')}
                                 </h5>
-                                <span className="text-[8.5px] font-sans font-bold text-gray-500 uppercase tracking-wider">
+                                <span className="text-[8.5px] font-sans font-bold text-gray-500 uppercase tracking-wider block mt-0.5">
                                   {m.rarity.toUpperCase()} &bull; Cấp {m.level}/5
                                 </span>
                               </div>
@@ -438,6 +455,16 @@ export default function Sidebar({ gameState, setGameState, onAvatarClick, addNot
                               )}
                               {m.statBoost.cdReduc && (
                                 <p>⚙️ Thấu lăng giảm hồi: <span className="text-[#a3e635] font-bold font-sans">+{Math.floor(m.statBoost.cdReduc * (1 + (m.level - 1) * 0.45) * 100)}% CD</span></p>
+                              )}
+                              {m.heritage && (
+                                <div className="mt-1.5 text-[8px] text-amber-200/80 leading-relaxed font-sans italic border-t border-white/5 pt-1">
+                                  " {
+                                    m.heritage === 'thất truyền' ? 'Bảo thư thất truyền vạn năm, phong ấn ma kỵ thần chưởng siêu việt.' :
+                                    m.heritage === 'gia truyền' ? 'Bí thuật tổ tông chân truyền, chỉ lưu giữ bằng cách truyền âm không chép lời.' :
+                                    m.heritage === 'tông truyền' ? 'Bản chính của Chưởng môn lưu giữ tại tầng 9 Tàng Kinh Các môn phái.' :
+                                    'Thánh bản được đế vương ban tặng, uy lực càn khôn bát quái.'
+                                  } "
+                                </div>
                               )}
                             </div>
                           )}
@@ -731,6 +758,36 @@ export default function Sidebar({ gameState, setGameState, onAvatarClick, addNot
                 <p>🚩 Triệu hồi Trận Pháp Hào Quang quanh bản thể gây <span className="text-green-500 font-bold font-sans">{(10 + item.power * 5).toFixed(0)} Sát Thương/s</span> và gắn linh kỳ thủ lĩnh.</p>
               )}
             </div>
+
+            {item.heritage && (
+              <div className="bg-amber-950/15 p-2.5 rounded border border-amber-500/10 mt-3 space-y-2">
+                <p className="text-amber-400 font-bold uppercase text-[9px] tracking-wide font-sans flex items-center gap-1">
+                  ⚔️ Cổ Sự Kỳ Vật • {HERITAGE_BADGES[item.heritage].label}
+                </p>
+                <p className="text-[10px] text-amber-100/90 leading-relaxed font-sans italic opacity-95">
+                  " {
+                    item.heritage === 'thất truyền' ? 'Khí giới cổ đại cực kỳ quý hiếm, từng thuộc về một vị cao thủ đắc đạo bỗng nhiên mai danh ẩn tích làm rúng động võ lâm mười vạn dặm.' :
+                    item.heritage === 'gia truyền' ? 'Bảo vật do gia tộc hào môn nhiều đời tàng trữ, mỗi rãnh khía sắc sảo đều được gọt giũa tỉ mỉ từ ngọc thạch nghìn năm đông lạnh.' :
+                    item.heritage === 'tông truyền' ? 'Binh khí do Chưởng môn nhân đích thân ban phong đạo ấn tôn chủ, khắc họa cổ tự tàn ảnh mang sức mạnh dời non lấp bể.' :
+                    'Pháp khí vô giá đúc từ tinh thiết sao băng quý giá trong mật cung hoàng gia, chỉ dùng để tưởng thưởng cho danh nhân đại hiệp cứu quốc.'
+                  } "
+                </p>
+                <div className="text-[10px] leading-snug font-sans space-y-1 pt-1.5 border-t border-amber-500/10">
+                  <p className="text-gray-400"><strong className="text-amber-300">Xuất xứ:</strong> {
+                    item.heritage === 'thất truyền' ? 'Bộ Chỉ Huy Giang Hồ Thất Bản' :
+                    item.heritage === 'gia truyền' ? 'Doanh Doanh Tư Gia Tôn Giả' :
+                    item.heritage === 'tông truyền' ? 'Tàng Kinh Điện / Trưởng Lão Bí Truyền' :
+                    'Hoàng Triều Lệnh Thư / Ân Điển Thánh Thượng'
+                  }</p>
+                  <p className="text-gray-400"><strong className="text-amber-300">Công hiệu độc đáo:</strong> {
+                    item.heritage === 'thất truyền' ? 'Thực khí hộ sinh, tự động kích phát hộ thể chân khí khi gặp nạn sát thân.' :
+                    item.heritage === 'gia truyền' ? 'Huyết thế bất khuất, càng chiến đấu càng cường đại nội nguyên.' :
+                    item.heritage === 'tông truyền' ? 'Khai phong phá nghịch, bộc phát kình lực tông môn chí cao vô thượng.' :
+                    'Thần minh gia trì, giảm bớt kiếp nạn và đẩy lui tà ma ngoại đạo tối tăm.'
+                  }</p>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-4 text-center text-gray-600 italic">

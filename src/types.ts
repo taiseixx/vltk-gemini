@@ -67,6 +67,7 @@ export interface MartialManual {
   name: string;
   sectId: string;
   rarity: 'common' | 'rare' | 'epic' | 'legendary'; // Sơ cấp, Trung cấp, Cao cấp, Tuyệt thế
+  heritage?: HeritagePrefix;
   effectName: string;
   statBoost: {
     atkChance?: number; // extra critical chance (e.g. 0.05)

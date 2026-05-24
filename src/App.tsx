@@ -255,7 +255,7 @@ export default function App() {
     textsRef.current = [];
   };
 
-  if (!gameState) {
+  if (!gameState || gameState.state === 'SELECTING') {
     return <SectSelection onSelect={initGame} onContinue={handleContinueGame} hasSave={!!loadGame()} />;
   }
 

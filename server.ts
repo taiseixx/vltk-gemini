@@ -1,7 +1,6 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -112,66 +111,8 @@ async function startServer() {
     const sectId = gameState?.player?.sectId || 'Vô Danh';
     const stage = gameState?.stage || 1;
 
-    try {
-      if (!process.env.GEMINI_API_KEY) {
-        console.warn("[API/encounter] GEMINI_API_KEY lacks. Invoking local generator.");
-        return res.json(getLocalEncounters(sectId, stage));
-      }
-
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const prompt = `
-        Bạn là một Dungeon Master cho một game Roguelite đề tài Võ Lâm rực rỡ mang tên "Võ Lâm Giang Hồ".
-        Nhân vật người chơi đang sử dụng là môn phái: ${sectId}.
-        Cấp độ hiện tại: ${stage}.
-        Máu hiện tại: ${gameState?.player?.hp ?? 100}/${gameState?.player?.maxHp ?? 300}.
-        Vàng: ${gameState?.gold ?? 0}.
-
-        Sinh ra 3 tình huống "Kỳ ngộ giang hồ" (Random encounter) ngẫu nhiên có ảnh hưởng tới nhân vật. 
-        Mỗi kỳ ngộ phải có độ hiếm khác nhau (Normal, Rare, Epic, Legendary), nội dung rất ngắn gọn gọn gàng để vừa màn hình mobile.
-        Hãy trả lời bằng định dạng JSON nghiêm ngặt tuân thủ cấu trúc sau (trả về 1 mảng gồm 3 object).
-        
-        [
-          {
-            "name": "Tên Kỳ Ngộ (Ngắn, ấn tượng)",
-            "rarity": "normal | rare | epic | legendary",
-            "event_text": "Mô tả kỳ ngộ cực ngắn gọn (1 câu dài nhất).",
-            "stat_changes": {
-              "hp": <nguyên dương là hồi máu, âm là mất máu>,
-              "gold": <dương là nhận vàng, âm là mất vàng>
-            }
-          }
-        ]
-      `;
-
-      // Limit response waiting to 4.5 seconds to bypass gateway timeouts if free tier is busy
-      const apiCall = ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        }
-      });
-
-      const response = await Promise.race([
-        apiCall,
-        new Promise<null>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 4500))
-      ]);
-      
-      if (response && response.text) {
-        let jsonResponse = response.text;
-        const parsed = JSON.parse(jsonResponse);
-        if (Array.isArray(parsed) && parsed.length === 3) {
-          return res.json(parsed);
-        }
-      }
-      
-      console.warn("[API/encounter] Invalid response empty; defaulting to fallback.");
-      return res.json(getLocalEncounters(sectId, stage));
-
-    } catch (error) {
-      console.warn("[API/encounter] Gemini Rate limited 429 or API Exception. Seamless fallback initiated.");
-      return res.json(getLocalEncounters(sectId, stage));
-    }
+    // Direct return of pre-configured local encounters (avoids LLM token cost)
+    return res.json(getLocalEncounters(sectId, stage));
   });
 
   // Vite middleware for development

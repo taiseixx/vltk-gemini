@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Trophy, Scroll, Eye, ChevronLeft, Award, CheckCircle2, ChevronDown, ChevronUp, Star, Lock } from 'lucide-react';
 import { RARITY_COLORS } from '../constants';
 import { HERITAGE_BADGES } from '../utils/quest';
+// @ts-ignore
+import equipmentBg from '../assets/images/equipment_bg_1779367218827.png';
 
 interface Props {
   gameState: GameState;
@@ -131,23 +133,37 @@ export default function QuestTracker({ gameState, setGameState, addNotification 
     <>
       {/* 1. FLOATING MINI WIDGET BELOW MINIMAP */}
       <div 
-        className="fixed z-40 bg-black/85 backdrop-blur-md rounded-lg border border-amber-900/60 p-2 text-white overflow-hidden max-w-[230px] w-52 pointer-events-auto transition-all duration-300 shadow-[0_4px_16px_rgba(0,0,0,0.6)]"
+        className={`fixed z-40 bg-black/90 backdrop-blur-xl rounded-xl border border-amber-500/20 shadow-2xl overflow-hidden pointer-events-auto transition-all duration-300 ${collapsed ? 'w-auto max-w-[100px] p-2' : 'max-w-[230px] w-52 p-2.5'}`}
         style={{
           left: '12px',
-          top: window.innerWidth < 768 ? '185px' : '250px'
+          top: window.innerWidth < 768 ? '185px' : '250px',
+          backgroundImage: `url(${equipmentBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundBlendMode: 'overlay',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1)',
         }}
         id="wuxia-panel-quest-tracker"
       >
-        <div className="flex items-center justify-between border-b border-amber-950pb-1.5 mb-1.5">
-          <div className="flex items-center gap-1">
-            <Scroll className="w-3.5 h-3.5 text-amber-500" />
-            <h3 className="font-serif font-black text-xs text-amber-400 uppercase tracking-wider">
-              Giang Hồ Sự ({activeCount}/3)
-            </h3>
+        <div className={`flex items-center justify-between ${collapsed ? '' : 'border-b border-amber-500/10 pb-2 mb-2'} relative z-10`}>
+          <div className="flex items-center gap-2" onClick={() => collapsed && setCollapsed(false)} style={{cursor: collapsed ? 'pointer': 'default'}}>
+            <div className={`flex items-center justify-center rounded-full bg-amber-950/40 border ${collapsed ? 'w-8 h-8 border-amber-500/50' : 'w-5 h-5 border-amber-500/30'}`}>
+              <Scroll className={collapsed ? 'w-4 h-4 text-amber-400 drop-shadow-md' : 'w-3 h-3 text-amber-400'} />
+            </div>
+            {!collapsed ? (
+              <h3 className="font-serif font-black text-[11px] text-[#fcfbf9] uppercase tracking-widest drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                Kỳ Sự ({activeCount}/3)
+              </h3>
+            ) : (
+              <span className="font-black text-amber-400 font-sans text-sm drop-shadow-md pr-1">{activeCount}/3</span>
+            )}
           </div>
           <button 
-            onClick={() => setCollapsed(!collapsed)}
-            className="text-amber-600 hover:text-amber-400 transition-colors p-0.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCollapsed(!collapsed);
+            }}
+            className="text-amber-500 hover:text-amber-300 transition-colors p-0.5 bg-black/40 hover:bg-black/60 rounded border border-amber-500/20 active:scale-95 cursor-pointer relative z-20 shrink-0"
           >
             {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
           </button>

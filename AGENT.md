@@ -1,222 +1,483 @@
 # AGENT.md — VLTK Roguelite Game Development Guide
 
-> **Đây là file hướng dẫn bắt buộc cho mọi coding agent khi làm việc với dự án Võ Lâm Roguelite.**
-> Đọc TOÀN BỘ file này TRƯỚC KHI bắt đầu bất kỳ task phát triển hay sửa đổi nào.
-> Cập nhật file này sau mỗi lần bổ sung tính năng lớn hoặc quy chuẩn kiến trúc mới.
+> **Đây là file hướng dẫn hành động bắt buộc dành cho mọi Coding Agent khi làm việc với dự án Võ Lâm Roguelite.**
+> Đọc TOÀN BỘ file này TRƯỚC KHI thực hiện bất kỳ thay đổi nào trong mã nguồn. 
+> Luôn luôn cập nhật hướng dẫn này mỗi khi tích hợp tính năng lớn hoặc thay đổi quy chuẩn hệ thống.
 
 ---
 
-## 0. TL;DR — Đọc Ngay Để Nắm Cốt Lõi
+## 0. TL;DR — Đặc Tả Cực Nhanh
 
 ```yaml
-Stack   : React 18 + Vite + Custom HTML5 2D Canvas Renderer
-Theme   : Võ Lâm Truyền Kỳ — 10 phái chính tông (Thiếu Lâm, Võ Đang, Nga Mi, Cái Bang, Đường Môn, Ngũ Độc,...)
-Genre   : Roguelite Survival / Auto-combat — di chuyển rà rương, đánh địch, dọn quái, chiêu mộ Đồng Hành, sưu tầm Bí Kíp
-AI      : Google Gemini API (Server-side proxy `/api/encounter`) — Tự động sinh cuộc Kỳ Ngộ Giang Hồ dựa trên phái và trạng thái người chơi
-Build   : Vite + Esbuild (Standalone production-ready full-stack container on port 3000)
-Linter  : ESLint (`npm run lint` / `tsc --noEmit` check loại bỏ type-error)
-```
-
-**Quy tắc tối thượng:**
-1. **Tuyệt đối không để lộ API Key:** Mọi cuộc gọi Gemini API đều **phải** được thực hiện ở server-side (`/server.ts`).
-2. **Luôn có Fallback Ngoại Tuyến (Offline-Capable):** Tránh dừng game hay ném lỗi đỏ lòm khi trúng giới hạn 429 Quota Limit của Gemini Free Tier. Sử dụng bộ sinh Kỳ Ngộ cục bộ `getLocalEncounters` tích hợp sẵn trong `server.ts`.
-3. **Quản lý state trung thực:** State tổng thể là `GameState` được định nghĩa trong `src/types.ts`. Mutation diễn ra mượt mà thông qua `setGameState` trong `src/App.tsx`.
-
----
-
-## 1. Tầm Nhìn Dự Án & Trụ Cột Thiết Kế
-
-### 1.1 Tầm Nhìn (Vision)
-
-**VLTK Roguelite** tái hiện trải nghiệm huyền thoại Võ Lâm Truyền Kỳ dậm chất võ hiệp, kết hợp với các vòng lặp hồi hộp của dòng game Roguelite hiện đại (Survivor, bento unlocks, buybacks). Người chơi điều khiển đệ tử môn phái vượt qua các ải tràn đầy quái vật, đối đầu với Thủ Lĩnh, săn lùng trang bị nhiều phẩm chất, tu dưỡng Bí Kíp Sư Môn và rinh về Ngân Lượng vàng ròng.
-
-### 1.2 Trụ Cột Thiết Kế
-
-| Trụ Cột | Nội Dung Triển Khai |
-| :--- | :--- |
-| **10 Phái Chính Tông** | Đồ sộ, cân bằng ngũ hành, mỗi phái có chỉ số tiềm năng và kĩ năng combo đỉnh tâm riêng. |
-| **Custom Canvas Engine** | Hiệu năng cực cao nhờ vẽ trực tiếp tệp ảnh Sprite, xử lý triệt để nền đen/nền đục bằng bộ lọc khử ảnh động (`removeCharacterBackground`). |
-| **Kỳ Ngộ Độc Đắc** | Tận dụng AI để vẽ ra những tình huống hỷ nộ ái ố trên giang hồ có ảnh hưởng tăng giảm máu/vàng của người chơi. |
-| **Thương Nhân Vong Xuyên** | Vòng lặp mua sinh mạng, tầm bảo trang bị giữa mỗi ải, kịch tính tăng giá theo hệ số ải. |
-
----
-
-## 2. Các Lệnh Điều Hành Dự Án
-
-```bash
-# Cài đặt toàn bộ thư viện cần thiết
-npm install
-
-# Khởi chạy máy chủ phát triển (Gộp cả Express Server & Vite middleware trên cổng 3000)
-npm run dev
-
-# Biên dịch ứng dụng bản Production (Vite build + CJS Server)
-npm run build
-
-# Khởi chạy bản Production dựng sẵn
-npm run start
-
-# Chạy kiểm tra lỗi cú pháp và phân loại kiểu dữ liệu
-npm run lint
+Stack   : React 18 + Vite + Custom HTML5 2D Canvas Engine
+Theme   : Võ Lâm Truyền Kỳ (Vuxia) — Đầy đủ Thập Đại Phái chính tông
+Genre   : Roguelite Auto-combat Survivor — Vượt ải dọn quái, chiêu hộ Đồng Hành, săn Trang Bị, tu luyện Bí Kíp.
+AI      : Google Gemini API Server-proxy (`/api/encounter`) — Tự động sinh cuộc Kỳ Ngộ ngẫu nhiên.
+Linter  : ESLint (`npm run lint` / `tsc --noEmit` check loại bỏ type-error trước khi build)
+RNG     : Seeded/Simple RNG với State Auto-save & Load tức thời qua LocalStorage
 ```
 
 ---
 
-## 3. Kiến Trúc Tổ Chức Thư Mục
+## 1. Bản Đồ Giao Thức Dữ Liệu (Game State Data Specifications)
 
-```
-/
-├── server.ts                  # Máy chủ Express gộp API Kỳ Ngộ (/api/encounter) và Vite mode.
-├── package.json               # Quản lý script khởi chạy & dependencies.
-├── metadata.json              # Khai báo cấu hình quyền hạn và major capabilities ứng dụng.
-├── src/
-│   ├── App.tsx                # Giao diện chính điều phối trạng thái, auto-save, nạp tài nguyên.
-│   ├── main.tsx               # Điểm kết nối React 18 khởi thủy.
-│   ├── types.ts               # Khai báo kiểu dữ liệu toàn cục (GameState, MartialManual, Companion, etc.).
-│   ├── constants.ts           # Định nghĩa 10 đại phái, bảng màu phẩm bửu, hằng số bản đồ.
-│   ├── index.css              # Tệp CSS nhập Tailwind CSS chỉnh sửa đồng nhất.
-│   │
-│   ├── components/            # Các thành phần giao diện trực quan
-│   │   ├── GameCanvas.tsx     # Bộ nhân xử lý trò chơi - Vẽ hoạt họa, phím di chuyển, combo đòn thế, hạt rực rỡ.
-│   │   ├── HUD.tsx            # Hiển thị thanh máu (HP), chân khí (MP), cấp độ và nút cài đặt.
-│   │   ├── Sidebar.tsx        # Panel nhân vật chính: Xem và mặc Trang Bị, Tu bồi Bí Kíp võ công.
-│   │   ├── SkillBar.tsx       # Hiển thị kĩ năng, thời gian hồi (cooldown), nút bật/tắt Tự Động (Auto-play).
-│   │   ├── QuestTracker.tsx   # Theo dõi danh sách Nhiệm vụ giang hồ (Tống Kim, Tiêu Diệt, Hộ Tống).
-│   │   ├── StageClearOverlay.tsx # Hiển thị thưởng Vượt Ải (Kỳ Ngộ Nhập Môn) & Cửa hàng Vong Xuyên.
-│   │   ├── SectSelection.tsx  # Giao diện chọn 10 môn phái khi bắt đầu lượt chơi mới (Run).
-│   │   ├── StatsPopup.tsx     # Bảng nâng điểm tiềm năng (Sức mạnh, Thân pháp, Ngoại công, Nội công, Linh lực).
-│   │   └── ShopOverlay.tsx    # Cửa hàng giao dịch mua bán trang bị thu được.
-│   │
-│   └── utils/                 # Hàm tiện ích độc lập
-│       ├── comboHelper.ts     # Tính toán phát hiện liên chiêu kích hoạt thuộc tính.
-│       ├── companionHelper.ts # Khởi tạo chỉ số của hộ vệ đồng hành theo Sư Môn.
-│       ├── economy.ts         # Tính toán hệ số lạm phát giá vàng theo độ khó ải.
-│       ├── quest.ts           # Hệ thống sinh ngẫu nhiên nhiệm vụ giang hồ và bí kíp môn phái.
-│       └── storage.ts         # Đắp nối lưu trữ - tải lượt chơi cục bộ qua LocalStorage.
-```
-
----
-
-## 4. Kiến Thức Nền — Võ Lâm Hùng Bá
-
-### 4.1 Thập Đại Môn Phái (10 Sects)
-
-Hệ thống môn phái chia đều các chỉ số chiến lược ban đầu:
-
-1. **Thiếu Lâm (sl):** Thiên về Ngoại Công (Con) dồi dào, sinh lực cao nhất. Hộ Vệ: *Đạt Ma Tăng*.
-2. **Võ Đang (vd):** Cân bằng hoàn hảo giữa Thân Pháp (Agi) và Nội Công (Nei). Hộ Vệ: *Chân Vũ Đài Sĩ*.
-3. **Nga Mi (nm):** Buff hỗ trợ, tăng trưởng mana hồi tốt. Hộ Vệ: *Tịnh Nhàn Ni Cô*.
-4. **Cái Bang (cb):** Thân pháp cao, bạo kích mạnh. Hộ Vệ: *Hồng Thất Khất*.
-5. **Đường Môn (tm):** Thợ đặt bẫy, ám khí tiễn thuật tầm xa. Hộ Vệ: *Tiêu Hồn Sát*.
-6. **Côn Lân (cl):** Sấm sét, tốc đao xuất chiêu nhanh. Hộ Vệ: *Lôi Chấn Tử*.
-7. **Ngũ Độc (nd):** Độc chú dòn dã rút máu quái theo thời gian. Hộ Vệ: *Cổ Thần Nhân*.
-8. **Thúy Yên (ty):** Băng sương làm chậm, né tránh xuất chúng. Hộ Vệ: *Tuyết Ảnh Điệp*.
-9. **Thiên Vương (tv):** Cận chiến siêu phòng thủ, kháng tính hoàn mỹ. Hộ Vệ: *Dũng Tướng Quân*.
-10. **Thiên Nhẫn (tn):** Hỏa thiêu cường bạo, gia tăng sát thương chí mạng nổ diện rộng. Hộ Vệ: *Ma Giáo Thần Sử*.
-
-### 4.2 Tu Luyện Bí Kíp (Sư Môn Bí Kíp)
-
-Bên cạnh trang bị võ bửu, người môn hạ được trang bị khối hệ thống **Bí Kíp Môn Phái** dồi dào sức chiến đấu:
-- Được trang bị tối đa **2 quyển** cùng lúc để cộng dồn hiệu ứng.
-- **Nâng cấp bằng Vàng** lũy tiến nhân hệ số `1.8x`. Đạt cực đỉnh tại Cấp 5.
-- Bao gồm các chỉ số gia cường thiết thực: Tăng sát thương phần trăm (`dmgMult`), cộng máu phẳng (`hpBonus`), rút ngắn thời gian hồi kĩ năng (`cdReduc`).
-
----
-
-## 5. Hướng Dẫn Lập Trình & Quy Chuẩn Code
-
-### 5.1 Quản Lý Trạng Thái (GameState Flow)
-
-Tất cả trạng thái của một vòng chơi (Run-based) được đồng hóa qua định dạng JSON lưu trong LocalStorage. 
-- **Auto-Save:** Thực hiện lưu tự động qua React `useEffect` mỗi khi `gameState` biến chuyển tích cực.
-- **Khôi Phục:** Nút **"Tiếp Tục"** ở Menu chính sẽ tự phục hồi nhân vật, trang bị, bí kíp, tiến trình ải và đồng hành nguyên vẹn hệt như trước khi tắt trình duyệt.
+Để tránh biên dịch lỗi hoặc tự suy diễn thuộc tính không tồn tại, dưới đây là toàn bộ cấu trúc định kiểu cực kỳ chi tiết trong `src/types.ts` không cắt ngắn:
 
 ```typescript
-// Định nghĩa cấu trúc lưu thiết yếu (src/types.ts)
+export type Rarity = 'common' | 'rare' | 'epic' | 'legendary' | 'emerald' | 'gold_rarity' | 'crimson' | 'pink';
+
+export type HeritagePrefix = 'thất truyền' | 'gia truyền' | 'tông truyền' | 'ân điển';
+
+export interface Sect {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  motto: string;
+  stats: {
+    str: number; // Sức mạnh (Ảnh hưởng Sát thương - ATK)
+    agi: number; // Thân pháp (Tốc độ, Né tránh)
+    con: number; // Ngoại công (Máu cực đại - Max HP)
+    int: number; // Nội công (Nội lực cực đại - Max MP)
+    nei: number; // Linh lực (Hồi phục chân khí)
+  };
+  skills: string[];
+}
+
+export interface Skill {
+  name: string;
+  level: number;
+  maxLevel: number;
+  cooldown: number;
+  cooldownLeft: number;
+  manaCost: number;
+  baseDamage: number;
+  range: number;
+  color: string;
+}
+
+export type EquipmentType = 'weapon' | 'armor' | 'accessory' | 'special' | 'horse' | 'cloak' | 'seal' | 'banner';
+
+export interface Equipment {
+  type: EquipmentType;
+  rarity: Rarity;
+  power: number;
+  name: string;
+  tier?: number;
+  upgradeLvl?: number;
+  heritage?: HeritagePrefix;
+}
+
+export interface Quest {
+  id: string;
+  title: string;
+  description: string;
+  type: 'escort' | 'jailbreak' | 'sect' | 'songjin';
+  difficulty: 'Trầm Tích' | 'Giang Hồ' | 'Tông Môn' | 'Hoàng Kim';
+  banner: string;
+  targetCount: number;
+  currentCount: number;
+  status: 'available' | 'active' | 'completed' | 'claimed';
+  rewardLabel: string;
+  rewardValue: {
+    gold: number;
+    exp: number;
+    equipRarity: Rarity;
+    equipPrefix: HeritagePrefix;
+  };
+}
+
+export interface MartialManual {
+  id: string;
+  name: string;
+  sectId: string;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  effectName: string;
+  statBoost: {
+    atkChance?: number; // Tỉ lệ Chí Mạng cộng thêm (ví dụ: 0.04)
+    atkSpeed?: number;  // Tốc độ đánh / Giảm thời gian hồi ám khí (ví dụ: 0.08)
+    goldMult?: number;  // Hệ số vàng nhận thêm (ví dụ: 0.15)
+    resBonus?: number;  // Kháng tính phòng thủ (ví dụ: 0.10)
+    hpBonus?: number;   // Máu phẳng dồi dào (ví dụ: 50)
+    mpBonus?: number;   // Chân khí nội tạng (ví dụ: 30)
+    dmgMult?: number;   // Lực phách công chưởng (ví dụ: 0.10)
+    cdReduc?: number;   // Thấu lăng giảm hồi chiêu thức (ví dụ: 0.08)
+  };
+  icon: string;
+  equipped: boolean;
+  level: number;
+  maxLevel: number;
+  levelRequirement: number;
+}
+
+export interface Companion {
+  name: string;
+  type: string;
+  emoji: string;
+  level: number;
+  exp: number;
+  hp: number;
+  maxHp: number;
+  atk: number;
+  unlocked: boolean;
+  equipment: {
+    weapon: Equipment | null;
+    armor: Equipment | null;
+  };
+}
+
+export interface Entity {
+  id: number;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  atk: number;
+  speed: number;
+  size: number;
+  atkCd: number;
+  color: string;
+  isBoss: boolean;
+  name?: string;
+  isSubBoss?: boolean;
+  element?: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth';
+}
+
 export interface GameState {
   state: 'SELECTING' | 'PLAYING' | 'CLEARED' | 'GAMEOVER';
   stage: number;
+  lives: number;
+  livesBought: number;
   gold: number;
   exp: number;
+  mobsTotal: number;
+  mobsKilled: number;
+  bossSpawned: boolean;
+  stagePhase: 'CREEPS' | 'SUB_BOSSES' | 'FINAL_BOSS';
+  auto: boolean;
   player: {
-    hp: number; maxHp: number;
-    mp: number; maxMp: number;
-    atk: number;
+    x: number;
+    y: number;
+    targetX: number;
+    targetY: number;
+    radius: number;
+    speed: number;
+    facing: number;
     level: number;
-    equipment: { ... };
+    statPoints: number;
+    skillPoints: number;
+    baseStats: Sect['stats'];
+    currentStats: Sect['stats'];
+    hp: number;
+    maxHp: number;
+    mp: number;
+    maxMp: number;
+    atk: number;
+    rage: number;
+    maxRage: number;
+    rageActive?: boolean;
+    rageTimer?: number;
+    target: Entity | null;
+    moving: boolean;
+    atkCd: number;
+    dead: boolean;
+    color: string;
+    icon: string;
+    sectId?: string;
+    skillComboHistory?: number[]; 
+    comboTimer?: number;
+    activeCombo?: { name: string; multiplier: number; timer: number; color: string } | null;
+    equipment: {
+      weapon: Equipment | null;
+      armor: Equipment | null;
+      accessory: Equipment | null;
+      special: Equipment | null;
+      horse: Equipment | null;
+      cloak: Equipment | null;
+      seal: Equipment | null;
+      banner: Equipment | null;
+    };
   };
+  buffs: {
+    dmgMult: number;
+    hpMult: number;
+    cdReduc: number;
+    resMult: number;
+    rlGold: number;
+    rlExp: number;
+    rlExec: number;
+    critDmgMult?: number;
+    skillRangeBonus?: number;
+  };
+  skills: Skill[];
+  entities: Entity[];
+  drops: Drop[];
+  livesPurchased: number;
   companion?: Companion;
   quests?: Quest[];
   manuals?: MartialManual[];
 }
 ```
 
-### 5.2 Custom 2D Canvas Renderer (GameCanvas.tsx)
-
-Xử lý đồ họa trực diện thông qua hàm `loop(time)` dập nhịp liên tục nhờ `requestAnimationFrame`:
-1. **Camera Hệ:** Di chuyển mượt mà bám sát tọa độ nhân vật chính. Tạo hiệu ứng rung lắc `shakeRef` mãn nhãn mỗi khi nhân vật trúng đòn nặng hoặc xuất chiêu Tuyệt học.
-2. **Hệ Thống Hạt (Particle System) & Chữ Nổi:** Mỗi cú chém, vụ nổ lửa, hay tia sấm sét đều sản sinh các hạt màu sắc với thời gian sống độc lập (`life`), chuyển dịch gia tốc (`vx, vy`) dạt dào sinh khí.
-3. ** Autonomous Companion (Đồng Hành Hòa Nhịp):** Đồng hành tự động tìm kẻ địch gần nhất trong bán kính 350px để quất đòn chí mạng hỗ trợ, vẽ vạch quỹ đạo đạn màu vàng cổ điển, bay chữ nổi báo sát thương rực rỡ.
-
 ---
 
-## 6. Tham Số Cân Bằng Game (Stage Scaling)
+## 2. Quy Chuẩn Viết Code & Thiết Kế Kiến Trúc (Code Conventions)
 
-Hệ thống tính toán kinh tế giang hồ nằm ở mục `src/utils/economy.ts` và `src/constants.ts`:
-- **Độ khó quái:** HP và sát thương kẻ địch nhân gia hệ số tăng dần tương ứng với số ải (`stage`).
-- **Merchant of River Styx (Giá cả thương nhân):** Vượt qua ải 10, giá mua Mạng hồi sinh (`Heart`) và Tầm Bảo Thiết Bản vẽ vũ khí (`Gacha Weapon`) tăng lũy kế để kiểm soát lạm phát vàng trong một lượt chạy kéo dài.
+Để duy trì chất lượng mã nguồn phát triển lâu dài không drift:
 
----
+### 2.1 Đặt Tên Biến & Kiểu Khai Báo (Naming Conventions)
+- **Tên Component / Type / Enum:** Luôn dùng `PascalCase` (vd: `GameCanvas`, `QuestTracker`, `MartialManual`).
+- **Tên Biến / Thuộc Tính / Hàm:** Luôn luôn dùng `camelCase` (vd: `setGameState`, `currentCount`, `removeCharacterBackground`).
+- **Tên Thư Mục / Ảnh Tĩnh:** Dùng `snake_case` hoặc viết thường cách nét ngang (vd: `assets/images/wuxia_escort.png`).
+- Đặt định kiểu tường minh, nghiêm cấm lạm dụng kiểu dạng thô `any` trong các hàm xử lý cốt lõi.
 
-## 7. Giải Pháp Sinh Ngẫu Nhiên Kỳ Ngộ Giang Hồ
+### 2.2 Quy Hoạch Vòng Lặp Canvas Hiệu Năng Cao (`GameCanvas.tsx`)
+- **Tách Biệt Sát Thương & Đồ Họa:** Logic di chuyển quái nhập tọa độ (`x, y`), tính toán va chạm vật lý **phải** được cập nhật một cách độc lập với chức năng vẽ (drawing functions).
+- **Vẽ Mượt Tránh Trì Trệ (Stateless Rendering):** Tuyệt đối không thực hiện đọc thuộc tính DOM lớn hoặc cập nhật State React cục bộ bên trong vòng lặp hoạt họa `requestAnimationFrame` (`loop` function). Chỉ sử dụng biến tham chiếu React `useRef` hoặc thay đổi trực tiếp đồ họa lớp Canvas.
+- **Micro-Stuttering Avoidance:** Không gọi thiết lập nạp hình ảnh `new Image()` hoặc dán pixel làm mịn trong hàm vẽ từng khung hình. Tất cả tài nguyên ảnh phải được tải sẵn và khử biên trong các mảng cached refs (`playerSectSpritesRef.current`).
 
-Tính năng "Kỳ Ngộ" lúc dọn xong ải mang đến những phần thưởng/hình phạt đa dạng:
+```typescript
+// ✅ ĐÚNG: Thay đổi trực tiếp hoạ đồ hạt rực rỡ qua update loop mà không cập nhật State React liên tục
+particlesRef.current.forEach(p => {
+  p.x += p.vx;
+  p.y += p.vy;
+  p.life--;
+});
 
+// ❌ SAI: Set state React liên tiếp mỗi mili-giây hoặc mỗi frame của Animation Loop
+setParticles(prev => prev.map(p => ({ ...p, x: p.x + p.vx }))); // KHÔNG! Sẽ làm tắc nghẽn giao diện và tụt FPS nghiêm trọng.
 ```
-Vượt Ải Thành Công
-  └── Fired POST request to /api/encounter (Server-side)
-        ├── if GEMINI OK  => Nhận 3 câu truyện ngẫu diệu do AI phác họa theo phái hiện thời.
-        └── if GEMINI 429 => Kích hoạt bộ sinh Kỳ Ngộ dồi dào sắc thái bản môn (Thiếu Lâm, Võ Đang, Cái Bang,...) cục bộ nhanh chóng (20ms), không gián đoạn trò chơi.
+
+---
+
+## 3. Bản Hướng Dẫn Hành Động Thêm Mới Tính Năng (Actionable Guides)
+
+Khi được yêu cầu mở rộng trò chơi, hãy tuân thủ chính xác từng bước một:
+
+### 3.1 Quy Trình Thêm Một Môn Phái Mới (New Sect)
+Để thêm một môn phái mới (ví dụ: phái Hoa Sơn - `hs`), làm đúng 3 bước:
+1. **Bước 1 (Định nghĩa hạt nhân):** Vào `src/constants.ts`, khai báo thêm môn phái vào cuối danh sách mẫu `SECTS`:
+   ```typescript
+   {
+     id: 'hs',
+     name: 'Hoa Sơn',
+     icon: '🗡️',
+     color: '#1abc9c',
+     motto: 'Kiếm xuất vô hình, Hành vân lưu thủy',
+     stats: { str: 3, agi: 3, con: 1, int: 2, nei: 1 },
+     skills: ['Hỗn Nguyên Chưởng', 'Quán Sa Kiếm', 'Thập Bát Đao Pháp', 'Độc Cô Cửu Kiếm Bản Phong']
+   }
+   ```
+2. **Bước 2 (Thiết lập Bí Kíp đồng bộ):** Tìm đến `SECT_LEVEL_MANUALS` trong `src/utils/quest.ts`, thêm danh mục bí bửu 3 cấp độ (Rare, Epic, Legendary):
+   ```typescript
+   hs: [
+     { name: 'Trung Cấp Tử Hà Thần Công', rarity: 'rare', effect: 'Lực nổ: +8% Lực phách sát lực', statBoost: { dmgMult: 0.08 } },
+     { name: 'Cao Cấp Kiếm Ý Thông Minh', rarity: 'epic', effect: 'Thần nhịp CD: Giảm 10% CD xuất chiêu', statBoost: { cdReduc: 0.10 } },
+     { name: 'Tuyệt Thế Độc Cô Kiếm Quyết', rarity: 'legendary', effect: 'Phong Vân: +40 HP cực hạn và +6% Chí Mạng', statBoost: { hpBonus: 40, atkChance: 0.06 } }
+   ]
+   ```
+3. **Bước 3 (Thêm Hộ Vệ Sư Môn):** Vào `src/utils/companionHelper.ts`, thêm tương ứng Hộ vệ Hoa Sơn cứu giá đắc lực (Ví dụ: `Kiếm Khách Hoa Sơn`).
+
+---
+
+### 3.2 Quy Trình Thêm Một Kỹ Năng Mới (New Skill / Combo)
+Muốn thêm chiêu thức mới kích hoạt trong chiến trận:
+1. **Bước 1:** Cập nhật tệp `src/constants.ts` trong dải chiêu của phái sở tại.
+2. **Bước 2:** Vào `src/components/GameCanvas.tsx`, bổ sung logic thi triển đồ họa cho chiêu thức đó bên trong hàm `castPlayerSkill` hoặc quy cách vẽ hạt chiêu tức:
+   ```typescript
+   if (skillName === "Độc Cô Cửu Kiếm Bản Phong") {
+     // Tạo loạt hạt kiếm bay vòng tròn
+     for (let i = 0; i < 8; i++) {
+       const angle = (i * Math.PI) / 4;
+       particlesRef.current.push({
+         x: player.x,
+         y: player.y,
+         vx: Math.cos(angle) * 7,
+         vy: Math.sin(angle) * 7,
+         life: 25,
+         color: "#1abc9c",
+         size: 4,
+         type: 'sword'
+       });
+     }
+   }
+   ```
+
+---
+
+### 3.3 Quy Trình Thêm Một Tình Huống Nhiệm Vụ Giang Hồ (New Quest)
+Khi bổ sung một thể loại nhiệm vụ mới:
+1. **Bước 1:** Khai báo kiểu Loại vào `Quest['type']` trong `src/types.ts`.
+2. **Bước 2:** Điền logic sinh tên gọi, mô tả, ảnh bìa, chỉ tiêu đếm quái (`targetCount`) và phần thưởng vào hàm `generateRandomQuest` trong `src/utils/quest.ts`.
+3. **Bước 3:** Bổ sung cơ chế cộng điểm tích lũy (`currentCount`) vào hàm kết liễu quái hoặc vượt ải tại `src/components/GameCanvas.tsx`:
+   ```typescript
+   setGameState(prev => {
+     const updatedQuests = prev.quests?.map(q => {
+       if (q.status === 'active' && q.type === 'new_type') {
+         const newCount = Math.min(q.targetCount, q.currentCount + 1);
+         return {
+           ...q,
+           currentCount: newCount,
+           status: newCount >= q.targetCount ? 'completed' : 'active'
+         };
+       }
+       return q;
+     });
+     return { ...prev, quests: updatedQuests };
+   });
+   ```
+
+---
+
+## 4. Hệ Thống Nhiệm Vụ & Đồng Hành (Specs & Lifecycle)
+
+### 4.1 Vòng Đời Nhiệm Vụ (Quest Lifecycle Flow)
+
+Vòng đời của cuộc hành tẩu Giang hồ diễn ra mạch lạc qua 4 nấc thang trạng thái:
+1. **available (Hiện Diện):** Xuất hiện khi người chơi mở hòm kỳ ngộ hoặc sau ải dọn phòng. Người chơi chọn "Nhận Nhiệm Vụ".
+2. **active (Chấp Hành):** Nhiệm vụ được theo dõi rà soát trong `QuestTracker`. Mỗi lần quái ngục trần ai hay Thủ Lĩnh ngã ngũ sẽ tăng biến `currentCount`.
+3. **completed (Hoàn Thành):** Khi `currentCount >= targetCount`, vạch chữ nổi báo rực rỡ "Nhiệm vụ hoàn thành", trạng thái chuyển thành `completed`.
+4. **claimed (Lãnh Thưởng):** Người chơi click "Nhận Quà" ở giao diên, nhận EXP, Vàng dạt dào và trang bị theo phẩm hệ, sau đó nhiệm vụ biến mất khỏi vách theo dõi.
+
+### 4.2 Thiết Đặc Tả Chỉ Số Companion (Đồng Hành Sư Môn)
+Companion bám vai người chiến sĩ di tản và đánh địch thông qua cơ chế tự động tìm mục tiêu (`target`):
+- **Cơ chế EXP:** Đồng Hành nhận `1` exp mỗi khi người chơi diệt quái. Đủ EXP thăng cấp tăng trực tiếp HP và sức tấn công `atk` dũng mãnh.
+- **Bộ trang bị đồng hành (`equipment`):** Được cường hóa giáp trụ (`armor`) hoặc đao kiếm (`weapon`) để cộng phần trăm sát thương rạch ròi.
+
+---
+
+## 5. Trọng Tâm Cân Bằng Game & Kinh Tế (Centralized Balance)
+
+Tránh tuyệt đối việc tự ý gài số ảo (Magic Numbers) trong toán thức. Mọi chỉ số phải theo sát quy luật:
+
+| Đối Tượng Đặc Tả | Hệ Số Tăng Trưởng Hoạt Động | Vị Trí Lưu Trữ / File |
+| :--- | :--- | :--- |
+| **Enemy HP Scale** | `HP = HP_base * (1 + stage * 0.15)` | `src/components/GameCanvas.tsx` |
+| **Enemy Damage Scale** | `Damage = Damage_base * (1 + stage * 0.12)` | `src/components/GameCanvas.tsx` |
+| **Giá Thập Vật phẩm** | `Price = Base_Price * (1 + Math.floor(stage / 10) * 0.25)` | `src/utils/economy.ts` -> `getStageAdjustedGold` |
+| **Bí Kíp Phí (Manual Upgrade)** | `Cost = 600 * Math.pow(1.8, current_level - 1)` | `src/components/Sidebar.tsx` -> `handleUpgradeManual` |
+
+---
+
+## 6. Săn Lùng Lỗi & Giải Pháp Hành Động (Known Bugs - Actionable)
+
+Dưới đây là các lỗi và thiếu sót hiệu năng đã xác định, kèm theo cách khắc phục cực kì chính xác cho các Agent trong tương lai:
+
+### BUG-001: Rò rỉ hiệu năng lọc pixel nền dán ảnh nhân vật
+- **Vấn đề:** Hàm lọc khử màu nền canvas `removeCharacterBackground()` của các file Sprite nhân vật chạy trực diện trong lúc render cảnh động. Điều này dẫn tới sụt giảm khung hình nghiêm trọng trên thiết bị cấu hình trung bình.
+- **Mức độ khẩn thiết:** **Cao (High)**
+- **Vỉ trí tệp tin:** `src/components/GameCanvas.tsx`
+- **Cách khắc phục chính thức:** Triển khai một bộ nhớ đệm `Map<string, CanvasImageSource>` để lưu trữ kết quả đầu ra của canvas đã lọc nền thay vì thực thi bóc tách pixel `getImageData` liên tục.
+  ```typescript
+  // ✅ Cách vá chuẩn xác:
+  const backgroundFilterCache = new Map<string, CanvasImageSource>();
+  export function getFilteredImage(img: HTMLImageElement, cacheKey: string): CanvasImageSource {
+    if (backgroundFilterCache.has(cacheKey)) {
+      return backgroundFilterCache.get(cacheKey)!;
+    }
+    const filtered = removeCharacterBackground(img);
+    backgroundFilterCache.set(cacheKey, filtered);
+    return filtered;
+  }
+  ```
+
+---
+
+## 7. Tài Bản Mẫu Google Gemini Prompts & Mock Payload
+
+Toàn bộ thông tin cuộc hội thoại truyền tin cho máy chủ và kết cấu phản hồi an toàn:
+
+### 7.1 Nội dung Prompt Truyền Tải lên Server
+```
+Nhân vật người chơi đang sử dụng là môn phái: {sectId}
+Cấp độ hiện tại: {stage}, Máu hiện tại: {hp}/{maxHp}, Vàng: {gold}
+Hãy sinh ra 3 tình huống "Kỳ ngộ giang hồ" theo kiểu JSON tinh tế cấu trúc...
+```
+
+### 7.2 Định dạng Mock JSON Response chuẩn khi Gemini Gặp Lỗi
+Khi API của Gemini trả về mã lỗi **429 (Resource Exhausted)** do vượt hạn mức ngày, server-side proxy ngay lập tức dạt về bộ ngắt mạch khẩn và gửi dữ liệu chuẩn chất Võ Lâm sau tới Client:
+
+```json
+[
+  {
+    "name": "Thần Tài Gõ Cửa",
+    "rarity": "rare",
+    "event_text": "Vô tình lượm được một túi gấm rách bên gốc đa chứa nhiều ngân lượng quý phái.",
+    "stat_changes": { "hp": 0, "gold": 120 }
+  },
+  {
+    "name": "Kẻ Gian Ám Toán",
+    "rarity": "normal",
+    "event_text": "Bị một nhóm thổ phỉ độc thủ phục kích trong trà quán quán bên góc đa.",
+    "stat_changes": { "hp": -25, "gold": -15 }
+  },
+  {
+    "name": "Môn Phái Đàn Kỳ",
+    "rarity": "epic",
+    "event_text": "Một bóng điểu đồng môn phái gửi mật tịnh đan bang trợ dũng khí dâng tràn.",
+    "stat_changes": { "hp": 50, "gold": 30 }
+  }
+]
 ```
 
 ---
 
-## 8. Sửa Lỗi Quota Limit 429 — Chữa Trị Triệt Để
+## 8. Chiến Thuật Kiểm Thử & Gỡ Lỗi (Testing & Debug Strategy)
 
-Giới hạn Free Tier của Gemini API chỉ cho phép gọi **20 lượt bứt phá mỗi ngày hoặc tốc độ giới hạn mỗi phút**. Để loại bỏ hoàn toàn các chấm lỗi đỏ hỏng trò chơi, chúng ta áp dụng mô hình **Double Safe-Guard**:
+Vì ứng dụng chạy trực tiếp trên luồng Full-stack không sử dụng Framework kiểm thử ngoài cồng kềnh, quyến rũ thực hiện debug an toàn bằng các phương án:
 
-1. **Phòng tránh lỗi tại Máy Chủ (`server.ts`):**
-   - Đóng gói toàn bộ lệnh gọi Gemini trong khối `try-catch`.
-   - Bổ sung hàm `getLocalEncounters` chứa sẵn kho tàng 11 tình huống Kỳ Ngộ giang hồ dập khuôn chuẩn kiếm hiệp (đầy đủ phân loại Rarity, tự động nhân hệ số tỉ lệ vàng/hp dồi dào theo chỉ số ải hiện tại).
-   - Đặt thời gian chờ tối thiểu `Promise.race` là **4.5 giây**. Nếu API bị đóng băng quá lâu do mạng nghẽn, máy chủ tự hủy lệnh gọi và nạp ngay Kỳ Ngộ nội bộ.
-
-2. **Cách phản hồi phía Client (`StageClearOverlay.tsx`):**
-   - Nhận diện tệp trả về dưới dạng JSON thô. Khi có biến cố lỗi từ Server, API `/api/encounter` vẫn bình tĩnh phản hồi mã `200 OK` chứa dữ liệu 3 Kỳ Ngộ địa phương thay vì ném lỗi `500 Internal Server error`.
-   - Trò chơi tiếp diễn cực kì mượt mà, người dùng hoàn toàn cảm nhận được chất li kì võ hiệp nguyên bản mà không hề hay biết API đang bị nghẽn mạng!
-
----
-
-## 9. Sự Mất Hợp Lý Đã Phát Hiện & Đề Xuất Cải Tiến
-
-### 1. Rò Rỉ Tài Nguyên Ảnh Nền
-- **Vấn đề:** Các hàm lọc màu pixel nền tranh (`removeCharacterBackground`) chạy trực tiếp trên luồng chính của trình duyệt (Main Thread) mỗi khi nhân vật hoặc đồng hành xuất chiêu nạp ảnh mới. Điều này có thể gây giật khung hình nhẹ (Micro-stuttering) đối với các dòng máy điện thoại di động cấu hình yếu.
-- **Đề xuất:** Thực hiện lưu trữ bộ nhớ đệm (Cache) các Canvas đã lọc nền thành công sau khi tải ảnh lần đầu ở màn hình chọn phái (`SectSelection`).
-
-### 2. Sự Mất Cân Bằng Giữa Các Phái Tầm Xa
-- **Vấn đề:** Đường Môn (tm) với Hộ vệ *Tiêu Hồn Sát* gây sát thương cực xa mà không cần áp sát, trong khi Thiếu Lâm (sl) hay Thiên Vương (tv) cận chiến chịu áp lực quái bu đông quá tải cực kì nặng.
-- **Đề xuất:** Thêm chỉ số Giáp phản sát thương vật lý hoặc Hút máu phần trăm cho riêng các võ phái trường phái Cận chiến để đảm bảo tính bình đẳng võ hiệp phong phú.
+1. **Trạng thái mô phỏng (Sandbox Debug Panel):** 
+   - Đính kèm trực tiếp trạng thái GameState vào biến toàn cục trình duyệt: `(window as any).gameState = gameState`.
+   - Giúp Agent mở console và can thiệp chỉ số tức thì để test (VD: tăng vàng thêm sắm đồ bằng dòng lệnh: `window.gameState.gold = 99999`).
+2. **Kiểm thử Canvas Render Loop:**
+   - Khi phát hiện quái vật biến mất hoặc lỗi tọa độ không vẽ được, kiểm tra điều kiện vẽ trong `draw()` có bị gãy do giá trị `NaN` hoặc `undefined` bằng cách đặt lồng kiểm tra giá trị cận vệ:
+     ```typescript
+     if (isNaN(entity.x) || isNaN(entity.y)) {
+       console.error("Entity position is NaN:", entity);
+       return;
+     }
+     ```
+3. **Mô phỏng API Kỳ Ngộ ngoại tuyến:**
+   - Hãy tắt tạm mạng hoặc đổi khóa mộc env `GEMINI_API_KEY=""` để đảm bảo hệ thống chuyển hướng thông suốt về bộ đệm cứu nguy `getLocalEncounters` hoạt động 100% không phát sinh lỗi phá hỏng app.
 
 ---
 
-## 10. Checklist Trước Khi Xác Nhận Thay Đổi (Commit)
+## 9. Bảng Thuật Ngữ Bản Môn Trực Quan (Terminology Table)
+
+Áp dụng đúng từ vựng Giang Hồ tương quan với thuộc tính kỹ thuật trong Code:
+
+| Thuật ngữ Võ Lâm | Thuộc tính/Properties trong Code | Ý nghĩa Chiến Thuật |
+| :--- | :--- | :--- |
+| **Nội Công (Tu dưỡng)** | `int` / `nei` | Tương đương mana tối đa và chỉ số hồi mana tĩnh. |
+| **Cực Cảnh Thần Phong** | `maxLevel` | Đạt ngưỡng cấp độ 5 cao nhất của Bí Kíp danh bất hư truyền. |
+| **Kỳ Ngộ Giang Hồ** | `api/encounter` | Sự kiện bất ngờ của AI tăng giảm thuộc tính lập tức. |
+| **Độ Khó Tông Môn** | `difficulty: 'Tông Môn'` | Cấp khó rương kho báu rơi vũ khí, x2 phần thưởng EXP. |
+| **Đồng Hành Chiếu Cố** | `companion` | Hộ vệ đi theo phụ công sát thương lớn định hướng kẻ địch. |
+| **Phong Vân Ân Điển** | `heritage: 'ân điển'` | Tiền tố hoàng kim bộc phá dòng thuộc tính trang bị ẩn. |
+
+---
+
+## 10. Checklist 15 Tiêu Điểm Sắt Đá Trước Khi Hoàn Thành Thay Đổi
 
 ```markdown
-- [x] Chạy `npm run lint` bảo đảm typescript gõ chữ sạch bóng không ném lỗi TS compilation.
-- [x] Chạy `npm run build` để kiểm tra Vite tổng hợp mã nguồn thành dạng tĩnh không vướng mắc.
-- [x] Check file `.env.example` xem đã khai báo các hằng số biến môi trường chuẩn chỉnh (không nạp keys thật).
-- [x] Bảo toàn cơ chế Fallback địa phương an tâm cho trải nghiệm không gián đoạn.
+- [ ] 1. Tuyệt đối không khai báo bất kỳ form/modal nhập khóa API trực tiếp cho người dùng.
+- [ ] 2. Tuyệt đối không để lộ file chứa API Key thật lên nhánh công khai của Git hay file ví dụ.
+- [ ] 3. Đã chạy thử lệnh linter `npm run lint` kiểm tra kiểu dữ liệu sạch bóng không warning dở dang.
+- [ ] 4. Đã lập hàm bổ sung dự phòng Kỳ Ngộ ngẫu nhiên `getLocalEncounters` tương đương cho mọi phái mới thêm.
+- [ ] 5. Mọi hình ảnh sử dụng thẻ JSX `<img>` đều có thuộc tính bảo an `referrerPolicy="no-referrer"`.
+- [ ] 6. Không có câu lệnh Mutate biến `GameState` trực hệ vô kỷ luật ngoài cơ chế an toàn `setGameState`.
+- [ ] 7. Không có vòng lặp cập nhật State vô hạn (`infinite re-renders`) bên trong React `useEffect`.
+- [ ] 8. Đã chạy thử nghiệm build thành công thông suốt cổng 3000 bằng lệnh `npm run build`.
+- [ ] 9. Khôi phục hoàn chỉnh trạng thái nhân vật tự động thông suốt từ bộ nhớ lưu trữ `localStorage`.
+- [ ] 10. Khoảng cách vẽ các nét chữ nổi không bị dính đè lên các đối tượng game khác.
+- [ ] 11. Các đối tượng Đồng hành tự động triệt tiêu đạn bay ra ngoài biên bản đồ đấu tranh tránh rò rỉ dung lượng.
+- [ ] 12. Không sử dụng thư viện mô phỏng mập mờ, giả lập tài nguyên không có thực trong package.
+- [ ] 13. Sử dụng đúng font chữ mặc định chuẩn chỉnh của hệ thống để đồng dạng giao diện.
+- [ ] 14. Bộ ngắt mạch Circuit Breaker khóa kết nối API hỏng hóc hoạt động mượt mà dưới 25ms.
+- [ ] 15. Cố định toàn vẹn các thông số cân bằng Giang hồ vào tệp constants tương ứng thấu suốt.
 ```
 
 ---
 
-*Tài liệu này là tài sản chung của đội ngũ phát triển Võ Lâm Roguelite, cập nhật liên tục để nâng tầm võ học nước nhà.*
+*File này được bảo toàn và tuân thủ vô điều kiện tuyệt đối bởi thế hệ điều phối trò chơi Võ Lâm Roguelite.*
+*Cập nhật lần cuối: May 24, 2026 bởi Code-Crafting AI.*
