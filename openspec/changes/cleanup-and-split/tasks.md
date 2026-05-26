@@ -53,23 +53,23 @@
 
 ## 6. Checkpoint 5 — Tách render/world (terrain, scenery, particles, texts, loading)
 
-- [ ] 6.1 Tạo `src/render/world.ts`
-- [ ] 6.2 Move `drawLoadingScreen` (≈dòng 1900-2014) sang `render/world.ts`
-- [ ] 6.3 Tách `render()` (dòng 2132+) thành các function nhỏ: `drawTerrain(ctx, params)`, `drawScenery(ctx, scenery, images)`, `drawParticles(ctx, particles)`, `drawFloatingTexts(ctx, texts)` — export tất cả
-- [ ] 6.4 Trong `GameCanvas.tsx` `render()`, gọi tuần tự các hàm này. Giữ **đúng thứ tự** đã có (terrain → scenery → drops → entities → player → particles → texts → UI).
-- [ ] 6.5 `npm run lint && npm run build` pass
-- [ ] 6.6 Smoke test: visual parity stage 1-2, không có flickering, particle vẽ trên top entities như trước
-- [ ] 6.7 Commit `refactor: extract world rendering passes into render/world.ts`
+- [x] 6.1 Tạo `src/render/world.ts`
+- [x] 6.2 Move `drawLoadingScreen` (≈dòng 1900-2014) sang `render/world.ts`
+- [x] 6.3 Tách `render()` (dòng 2132+) thành các function nhỏ: `drawTerrain(ctx, params)`, `drawScenery(ctx, scenery, images)`, `drawParticles(ctx, particles)`, `drawFloatingTexts(ctx, texts)` — export tất cả
+- [x] 6.4 Trong `GameCanvas.tsx` `render()`, gọi tuần tự các hàm này. Giữ **đúng thứ tự** đã có (terrain → scenery → drops → entities → player → particles → texts → UI).
+- [x] 6.5 `npm run lint && npm run build` pass
+- [x] 6.6 Smoke test: visual parity stage 1-2, không có flickering, particle vẽ trên top entities như trước
+- [x] 6.7 Commit `refactor: extract world rendering passes into render/world.ts`
 
 ## 7. Checkpoint 6 — Tách game/elements và game/spawn
 
-- [ ] 7.1 Tạo `src/game/elements.ts`. Move `getSectElement` (dòng 436), `getElementalMultipliers` (dòng 452), `getSectIdFromColor` (dòng 422 — đã unused sau Checkpoint 5, có thể xóa thay vì move; nếu xóa, ghi rõ trong commit)
-- [ ] 7.2 Tạo `src/game/spawn.ts`. Move `getBossCount`, `getMobsTotal`, `spawnWave`, `spawnSubBosses` (dòng 799-...). Convert closures dùng `stateRef`/`particlesRef` thành parameters: `spawnWave(state, entities, particles): Entity[]` returns new entities mảng để caller assign
-- [ ] 7.3 Trong `GameCanvas.tsx`, replace local spawn calls bằng imports + explicit param passing
-- [ ] 7.4 Verify `game/spawn.ts` không có import từ `react` hoặc `render/`
-- [ ] 7.5 `npm run lint && npm run build` pass
-- [ ] 7.6 Smoke test: mob spawn đúng quantity ở stage 1, 10, 20 (kiểm tra scaling formula còn nguyên)
-- [ ] 7.7 Commit `refactor: extract spawn and elements into game layer`
+- [x] 7.1 Tạo `src/game/elements.ts`. Move `getSectElement` (dòng 436), `getElementalMultipliers` (dòng 452), `getSectIdFromColor` (dòng 422 — đã unused sau Checkpoint 5, có thể xóa thay vì move; nếu xóa, ghi rõ trong commit)
+- [x] 7.2 Tạo `src/game/spawn.ts`. Move `getBossCount`, `getMobsTotal`, `spawnWave`, `spawnSubBosses` (dòng 799-...). Convert closures dùng `stateRef`/`particlesRef` thành parameters: `spawnWave(state, entities, particles): Entity[]` returns new entities mảng để caller assign
+- [x] 7.3 Trong `GameCanvas.tsx`, replace local spawn calls bằng imports + explicit param passing
+- [x] 7.4 Verify `game/spawn.ts` không có import từ `react` hoặc `render/`
+- [x] 7.5 `npm run lint && npm run build` pass
+- [x] 7.6 Smoke test: mob spawn đúng quantity ở stage 1, 10, 20 (kiểm tra scaling formula còn nguyên)
+- [x] 7.7 Commit `refactor: extract spawn and elements into game layer`
 
 ## 8. Checkpoint 7 — Tách game/systems/* lần lượt
 

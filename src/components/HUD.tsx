@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { Volume2, VolumeX, Music } from 'lucide-react';
 import { GameState } from '../types';
 import { SECTS } from '../constants';
+import { sfx } from '../utils/audio';
 
 interface Props {
   gameState: GameState;
@@ -27,6 +30,8 @@ const formatValue = (val: number): string => {
 };
 
 export default function HUD({ gameState, onAvatarClick }: Props) {
+  const [isMuted, setMuted] = useState(sfx.isMuted());
+  const [isBgmMuted, setBgmMuted] = useState(sfx.isBgmMuted());
   const p = gameState.player;
   const sect = SECTS.find(s => s.color === p.color);
   const maxExp = Math.floor(100 * Math.pow(1.2, p.level - 1));
@@ -172,8 +177,37 @@ export default function HUD({ gameState, onAvatarClick }: Props) {
         </div>
       </div>
 
-      {/* Symmetrizing spacer on desktop to mathematically center stage progress */}
-      <div className="hidden md:block w-[260px]" />
+      {/* Sound Controller and Symmetrizing spacer */}
+      <div className="flex items-center justify-end gap-2.5 w-[44%] md:w-[260px] pointer-events-auto">
+        {/* BGM Toggle button */}
+        <button
+          onClick={() => {
+            const isNowBgmMuted = sfx.toggleBgmMute();
+            setBgmMuted(isNowBgmMuted);
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/15 bg-black/50 hover:bg-black/70 hover:border-gold/60 text-gray-200 hover:text-gold transition-all duration-200 cursor-pointer shadow-lg text-[10px] md:text-xs font-serif font-bold tracking-wider"
+          title={isBgmMuted ? "Bật nhạc nền Kiếm Hiệp Tình" : "Tắt nhạc BGM"}
+        >
+          <Music className={`w-3.5 h-3.5 ${isBgmMuted ? 'text-gray-500' : 'text-gold animate-spin'} [animation-duration:8s]`} />
+          <span className={isBgmMuted ? "text-gray-500 line-through" : "text-amber-300 font-bold"}>Kiếm Hiệp Tình</span>
+        </button>
+
+        {/* SFX Toggle button */}
+        <button
+          onClick={() => {
+            const isNowMuted = sfx.toggleMute();
+            setMuted(isNowMuted);
+          }}
+          className="flex items-center justify-center p-2 rounded-full border border-white/10 bg-black/40 hover:bg-black/60 hover:border-gold/50 text-gray-300 hover:text-gold transition-all duration-200 cursor-pointer shadow-md"
+          title={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+        >
+          {isMuted ? (
+            <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
+          ) : (
+            <Volume2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 animate-pulse" />
+          )}
+        </button>
+      </div>
     </header>
   );
 }

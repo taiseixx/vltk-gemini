@@ -17,7 +17,6 @@ import {
   SECTS,
 } from "../constants";
 import { checkAndTriggerCombo } from "../utils/comboHelper";
-import { cc } from "../lib/cocos";
 import { SECT_LEVEL_MANUALS } from "../utils/quest";
 import { perfLogger } from "../utils/perfLogger";
 import grassImg from "../assets/images/wuxia_grassland_environment_1779601113241.png";
@@ -56,174 +55,28 @@ import tyCompImg from "../assets/images/companion_ty_1779612487644.png";
 import tvCompImg from "../assets/images/companion_tv_1779612509432.png";
 import tnCompImg from "../assets/images/companion_tn_1779612527728.png";
 
-function removeCharacterBackground(img: HTMLImageElement, tolerance = 35): CanvasImageSource {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return img;
-    ctx.drawImage(img, 0, 0);
-    const imgData = ctx.getImageData(0, 0, img.width, img.height);
-    const data = imgData.data;
+import { loadAllSprites, SpriteManifestItem } from "../render/spriteLoader";
+import { drawHuman } from "../render/character";
+import { drawBackground } from "../render/background";
+import {
+  drawLoadingScreen,
+  drawScenery,
+  drawParticles,
+  drawDrops,
+  drawFloatingTexts,
+  drawEntities,
+  drawPlayer,
+  drawMinimap,
+} from "../render/world";
 
-    const corners = [
-      { x: 2, y: 2 },
-      { x: img.width - 3, y: 2 },
-      { x: 2, y: img.height - 3 },
-      { x: img.width - 3, y: img.height - 3 }
-    ];
-
-    let bgR = 0, bgG = 0, bgB = 0;
-    let sampledCount = 0;
-    corners.forEach(p => {
-      if (p.x >= 0 && p.x < img.width && p.y >= 0 && p.y < img.height) {
-        const idx = (p.y * img.width + p.x) * 4;
-        bgR += data[idx];
-        bgG += data[idx + 1];
-        bgB += data[idx + 2];
-        sampledCount++;
-      }
-    });
-
-    if (sampledCount > 0) {
-      bgR = Math.round(bgR / sampledCount);
-      bgG = Math.round(bgG / sampledCount);
-      bgB = Math.round(bgB / sampledCount);
-    }
-
-    // Flood fill from corners instead of global replace to keep inner whites/blacks
-    const visited = new Uint8Array(img.width * img.height);
-    const queue: number[] = []; // store index
-    
-    // Push corners initially
-    corners.forEach(p => {
-      queue.push(p.y * img.width + p.x);
-    });
-
-    while(queue.length > 0) {
-      const pIdx = queue.shift()!;
-      if (visited[pIdx]) continue;
-      
-      const px = pIdx % img.width;
-      const py = Math.floor(pIdx / img.width);
-      
-      const i = pIdx * 4;
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-      
-      const diff = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
-      
-      if (diff <= tolerance) {
-        visited[pIdx] = 1;
-        data[i + 3] = 0; // erase
-        
-        // Add neighbors
-        if (px > 0 && !visited[pIdx - 1]) queue.push(pIdx - 1);
-        if (px < img.width - 1 && !visited[pIdx + 1]) queue.push(pIdx + 1);
-        if (py > 0 && !visited[pIdx - img.width]) queue.push(pIdx - img.width);
-        if (py < img.height - 1 && !visited[pIdx + img.width]) queue.push(pIdx + img.width);
-      }
-    }
-
-    ctx.putImageData(imgData, 0, 0);
-    return canvas;
-  } catch (err) {
-    return img;
-  }
-}
-
-function removeBlackBackground(img: HTMLImageElement, tolerance = 45): CanvasImageSource {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return img;
-    ctx.drawImage(img, 0, 0);
-    const imgData = ctx.getImageData(0, 0, img.width, img.height);
-    const data = imgData.data;
-
-    // Sample the corners to detect the natural background color
-    const corners = [
-      { x: 2, y: 2 },
-      { x: img.width - 3, y: 2 },
-      { x: 2, y: img.height - 3 },
-      { x: img.width - 3, y: img.height - 3 }
-    ];
-
-    let bgR = 0, bgG = 0, bgB = 0;
-    let sampledCount = 0;
-    corners.forEach(p => {
-      if (p.x >= 0 && p.x < img.width && p.y >= 0 && p.y < img.height) {
-        const idx = (p.y * img.width + p.x) * 4;
-        bgR += data[idx];
-        bgG += data[idx + 1];
-        bgB += data[idx + 2];
-        sampledCount++;
-      }
-    });
-
-    if (sampledCount > 0) {
-      bgR = Math.round(bgR / sampledCount);
-      bgG = Math.round(bgG / sampledCount);
-      bgB = Math.round(bgB / sampledCount);
-    }
-
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      const diff = Math.sqrt((r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2);
-      
-      // Safety fallbacks: absolute black & bright whites
-      const isExtremeBlack = r < 40 && g < 40 && b < 40;
-      
-      // Catapult background is off-white (around 220-255). This targets any near-white pixels cleanly:
-      const isExtremeWhite = r > 180 && g > 180 && b > 180 && Math.abs(r - g) < 25 && Math.abs(g - b) < 25;
-
-      if (diff < tolerance || isExtremeBlack || isExtremeWhite) {
-        data[i + 3] = 0;
-      }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    return canvas;
-  } catch (err) {
-    console.error("Alpha mask processing error:", err);
-    return img;
-  }
-}
-
-// Global Image Cache to prevent heavy Pixel-level Background Filtering on every component mount/remount
-const GLOBAL_IMAGE_CACHE: Record<string, CanvasImageSource> = {};
-
-function getCachedFilteredImage(
-  src: string,
-  filterType: "character" | "black",
-  tolerance = 45,
-  onLoaded: (canvas: CanvasImageSource) => void
-) {
-  const cacheKey = `${src}_${filterType}_${tolerance}`;
-  if (GLOBAL_IMAGE_CACHE[cacheKey]) {
-    onLoaded(GLOBAL_IMAGE_CACHE[cacheKey]);
-    return;
-  }
-
-  const img = new Image();
-  img.onload = () => {
-    let result: CanvasImageSource;
-    if (filterType === "character") {
-      result = removeCharacterBackground(img, tolerance);
-    } else {
-      result = removeBlackBackground(img, tolerance);
-    }
-    GLOBAL_IMAGE_CACHE[cacheKey] = result;
-    onLoaded(result);
-  };
-  img.src = src;
-}
+import { tickMovement } from "../game/systems/movement";
+import { tickCombat } from "../game/systems/combat";
+import { tickSkills } from "../game/systems/skills";
+import { tickCombo } from "../game/systems/combo";
+import { tickCompanion } from "../game/systems/companion";
+import { generateDrop, tickDrops } from "../game/systems/drops";
+import { tickPlayerState } from "../game/systems/player";
+import { tickStageState } from "../game/systems/stage";
 
 interface Props {
   gameState: GameState;
@@ -265,8 +118,6 @@ export default function GameCanvas({
 
   const grassImgRef = useRef<HTMLImageElement | null>(null);
   const stoneImgRef = useRef<HTMLImageElement | null>(null);
-  const grassPatternRef = useRef<CanvasPattern | null>(null);
-  const stonePatternRef = useRef<CanvasPattern | null>(null);
   const barricadeImgRef = useRef<CanvasImageSource | null>(null);
   const treeImgRef = useRef<CanvasImageSource | null>(null);
   const catapultImgRef = useRef<CanvasImageSource | null>(null);
@@ -289,14 +140,6 @@ export default function GameCanvas({
   });
 
   const companionAtkTimerRef = useRef(0);
-  const cocosSceneRef = useRef<cc.Node>(new cc.Node());
-  const cocosParticlesRef = useRef<cc.ParticleSystem>(new cc.ParticleSystem());
-
-  useEffect(() => {
-    cc.director.registerScene("BattleScene", cocosSceneRef.current);
-    cc.director.loadScene("BattleScene");
-    cocosSceneRef.current.addChild(cocosParticlesRef.current);
-  }, []);
 
   const TOTAL_RESOURCES = 31;
   const loadedResourcesRef = useRef(0);
@@ -306,107 +149,61 @@ export default function GameCanvas({
   };
 
   useEffect(() => {
-    // 1. Standalone load for raw background patterns
-    const grass = new Image();
-    grass.onload = () => {
-      grassImgRef.current = grass;
-      incrementLoaded();
-    };
-    grass.src = grassImg;
+    const manifest: SpriteManifestItem[] = [
+      { key: "grass", src: grassImg, filterType: "raw" },
+      { key: "stone", src: stoneImg, filterType: "raw" },
+      { key: "barricade", src: barricadeImg, filterType: "black", tolerance: 55 },
+      { key: "tree", src: treeImg, filterType: "black", tolerance: 55 },
+      { key: "catapult", src: catapultImg, filterType: "black", tolerance: 55 },
+      { key: "flag", src: flagImg, filterType: "black", tolerance: 55 },
+      { key: "lantern", src: lanternImg, filterType: "black", tolerance: 55 },
+      { key: "fence", src: fenceImg, filterType: "black", tolerance: 55 },
+      { key: "player", src: wuxiaPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "mob", src: wuxiaMobImg, filterType: "character", tolerance: 45 },
+      { key: "boss", src: wuxiaBossImg, filterType: "character", tolerance: 45 },
+      // 10 sectors player
+      { key: "p_sl", src: slPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_vd", src: vdPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_cb", src: cbPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_nm", src: nmPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_cl", src: clPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_nd", src: ndPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_tm", src: tmPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_ty", src: tyPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_tv", src: tvPlayerImg, filterType: "character", tolerance: 45 },
+      { key: "p_tn", src: tnPlayerImg, filterType: "character", tolerance: 45 },
+      // 10 sectors companion
+      { key: "c_sl", src: slCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_vd", src: vdCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_cb", src: cbCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_nm", src: nmCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_cl", src: clCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_nd", src: ndCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_tm", src: tmCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_ty", src: tyCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_tv", src: tvCompImg, filterType: "character", tolerance: 45 },
+      { key: "c_tn", src: tnCompImg, filterType: "character", tolerance: 45 },
+    ];
 
-    const stone = new Image();
-    stone.onload = () => {
-      stoneImgRef.current = stone;
-      incrementLoaded();
-    };
-    stone.src = stoneImg;
+    loadAllSprites(manifest, (loaded) => {
+      loadedResourcesRef.current = loaded;
+    }).then((res) => {
+      grassImgRef.current = res.grass;
+      stoneImgRef.current = res.stone;
+      barricadeImgRef.current = res.barricade;
+      treeImgRef.current = res.tree;
+      catapultImgRef.current = res.catapult;
+      flagImgRef.current = res.flag;
+      lanternImgRef.current = res.lantern;
+      fenceImgRef.current = res.fence;
+      playerSpriteRef.current = res.player;
+      mobSpriteRef.current = res.mob;
+      bossSpriteRef.current = res.boss;
 
-    // 2. Load and cache environmental items (black background removed)
-    getCachedFilteredImage(barricadeImg, "black", 55, (img) => {
-      barricadeImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(treeImg, "black", 55, (img) => {
-      treeImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(catapultImg, "black", 55, (img) => {
-      catapultImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(flagImg, "black", 55, (img) => {
-      flagImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(lanternImg, "black", 55, (img) => {
-      lanternImgRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(fenceImg, "black", 55, (img) => {
-      fenceImgRef.current = img;
-      incrementLoaded();
-    });
-
-    // 3. Load and cache player/mobs base sprites
-    getCachedFilteredImage(wuxiaPlayerImg, "character", 45, (img) => {
-      playerSpriteRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(wuxiaMobImg, "character", 45, (img) => {
-      mobSpriteRef.current = img;
-      incrementLoaded();
-    });
-
-    getCachedFilteredImage(wuxiaBossImg, "character", 45, (img) => {
-      bossSpriteRef.current = img;
-      incrementLoaded();
-    });
-
-    // 4. Load & Cache 10 Sect Player Sprites
-    const sectPlayerImgs: Record<string, string> = {
-      sl: slPlayerImg,
-      vd: vdPlayerImg,
-      cb: cbPlayerImg,
-      nm: nmPlayerImg,
-      cl: clPlayerImg,
-      nd: ndPlayerImg,
-      tm: tmPlayerImg,
-      ty: tyPlayerImg,
-      tv: tvPlayerImg,
-      tn: tnPlayerImg,
-    };
-
-    Object.entries(sectPlayerImgs).forEach(([sect, src]) => {
-      getCachedFilteredImage(src, "character", 45, (img) => {
-        playerSectSpritesRef.current[sect] = img;
-        incrementLoaded();
-      });
-    });
-
-    // 5. Load & Cache 10 Sect Companion Sprites
-    const sectCompImgs: Record<string, string> = {
-      sl: slCompImg,
-      vd: vdCompImg,
-      cb: cbCompImg,
-      nm: nmCompImg,
-      cl: clCompImg,
-      nd: ndCompImg,
-      tm: tmCompImg,
-      ty: tyCompImg,
-      tv: tvCompImg,
-      tn: tnCompImg,
-    };
-
-    Object.entries(sectCompImgs).forEach(([sect, src]) => {
-      getCachedFilteredImage(src, "character", 45, (img) => {
-        companionSectSpritesRef.current[sect] = img;
-        incrementLoaded();
+      const sectors = ["sl", "vd", "cb", "nm", "cl", "nd", "tm", "ty", "tv", "tn"];
+      sectors.forEach((sect) => {
+        playerSectSpritesRef.current[sect] = res[`p_${sect}`] || null;
+        companionSectSpritesRef.current[sect] = res[`c_${sect}`] || null;
       });
     });
   }, []);
@@ -419,1008 +216,80 @@ export default function GameCanvas({
     });
   };
 
-  const getSectIdFromColor = (color: string): string => {
-    if (color === '#e67e22') return 'sl'; // Thiếu Lâm
-    if (color === '#3498db') return 'vd'; // Võ Đang
-    if (color === '#27ae60') return 'cb'; // Cái Bang
-    if (color === '#e91e63') return 'nm'; // Nga Mi
-    if (color === '#f39c12') return 'cl'; // Côn Lôn
-    if (color === '#9b59b6') return 'nd'; // Ngũ Độc
-    if (color === '#8a2be2') return 'tm'; // Đường Môn
-    if (color === '#00bcd4') return 'ty'; // Thủy Yên/Thúy Yên
-    if (color === '#f44336') return 'tv'; // Thiên Vương
-    if (color === '#d35400') return 'tn'; // Thiên Nhẫn
-    return '';
-  };
-
-  const getSectElement = (sectId: string): 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth' => {
-    const sectElementMap: Record<string, 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'> = {
-      sl: 'Metal',
-      tv: 'Metal',
-      cb: 'Fire',
-      tn: 'Fire',
-      tm: 'Wood',
-      nd: 'Wood',
-      vd: 'Earth',
-      cl: 'Earth',
-      nm: 'Water',
-      ty: 'Water'
-    };
-    return sectElementMap[sectId] || 'Metal';
-  };
-
-  const getElementalMultipliers = (
-    attackerElement: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth',
-    defenderElement?: 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'
-  ): { mult: number; text: string; color: string } => {
-    if (!defenderElement) return { mult: 1.0, text: '', color: '' };
-    
-    const elementCounter: Record<'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth', 'Metal' | 'Wood' | 'Water' | 'Fire' | 'Earth'> = {
-      Metal: 'Wood',
-      Wood: 'Earth',
-      Earth: 'Water',
-      Water: 'Fire',
-      Fire: 'Metal'
-    };
-
-    const nameMap = { Metal: 'Kim', Wood: 'Mộc', Water: 'Thủy', Fire: 'Hỏa', Earth: 'Thổ' };
-
-    if (elementCounter[attackerElement] === defenderElement) {
-      return { mult: 1.5, text: `Khắc chế (${nameMap[attackerElement]} ➔ ${nameMap[defenderElement]})`, color: '#f1c40f' };
-    } else if (elementCounter[defenderElement] === attackerElement) {
-      return { mult: 0.7, text: `Bị khắc (${nameMap[attackerElement]} ⇠ ${nameMap[defenderElement]})`, color: '#7f8c8d' };
-    }
-    return { mult: 1.0, text: '', color: '' };
-  };
-
-  const drawHuman = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    sz: number,
-    c: string,
-    facing: number,
-    isBoss: boolean,
-    moving: boolean,
-    time: number,
-    hasCloak: boolean = false,
-  ) => {
-    const sectId = getSectIdFromColor(c);
-
-    // Elegant Angelic Wings (Cloak equipment) - Rendered behind player
-    if (hasCloak) {
-      const wingFlap = Math.sin(time * 0.008) * sz * 0.4;
-      ctx.save();
-      ctx.shadowBlur = 5;
-      
-      let mainWingColor = 'rgba(235, 95, 175, 0.95)';
-      let fillWingColor = 'rgba(235, 95, 175, 0.18)';
-      let shadowWingColor = 'rgb(235, 95, 175)';
-      
-      if (sectId === 'sl' || sectId === 'cl' || sectId === 'vd') {
-        mainWingColor = 'rgba(241, 196, 15, 0.95)';
-        fillWingColor = 'rgba(241, 196, 15, 0.2)';
-        shadowWingColor = '#f1c40f';
-      } else if (sectId === 'cb' || sectId === 'tn') {
-        mainWingColor = 'rgba(231, 76, 60, 0.95)';
-        fillWingColor = 'rgba(231, 76, 60, 0.2)';
-        shadowWingColor = '#e74c3c';
-      } else if (sectId === 'nd' || sectId === 'tm') {
-        mainWingColor = 'rgba(155, 89, 182, 0.95)';
-        fillWingColor = 'rgba(155, 89, 182, 0.2)';
-        shadowWingColor = '#9b59b6';
-      } else if (sectId === 'ty' || sectId === 'nm') {
-        mainWingColor = 'rgba(52, 152, 219, 0.95)';
-        fillWingColor = 'rgba(52, 152, 219, 0.2)';
-        shadowWingColor = '#3498db';
-      }
-      
-      ctx.strokeStyle = mainWingColor;
-      ctx.fillStyle = fillWingColor;
-      ctx.shadowColor = shadowWingColor;
-      
-      // Draw 3 layers of feathered curves for spectacular wing detailing
-      for (let layer = 0; layer < 3; layer++) {
-        const offset = layer * 4;
-        const scale = 1 - layer * 0.2;
-        ctx.lineWidth = 4 - layer * 1.2;
-        
-        ctx.beginPath();
-        ctx.moveTo(x - sz * 0.1, y + offset);
-        ctx.bezierCurveTo(
-          x - sz * 3.2 * scale, y - sz * 2.2 * scale + wingFlap,
-          x - sz * 3.8 * scale, y + sz * 1.2 * scale + wingFlap,
-          x - sz * 0.1, y + sz * 0.8
-        );
-        ctx.closePath();
-        ctx.stroke();
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(x + sz * 0.1, y + offset);
-        ctx.bezierCurveTo(
-          x + sz * 3.2 * scale, y - sz * 2.2 * scale + wingFlap,
-          x + sz * 3.8 * scale, y + sz * 1.2 * scale + wingFlap,
-          x + sz * 0.1, y + sz * 0.8
-        );
-        ctx.closePath();
-        ctx.stroke();
-        ctx.fill();
-      }
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(x, y + sz * 0.1, sz * 0.15, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.restore();
-    }
-
-    // Shadow
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
-    ctx.beginPath();
-    ctx.ellipse(x, y + sz, sz * 0.8, sz * 0.3, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    let bodyBounce = moving ? Math.abs(Math.sin(time * 0.015)) * sz * 0.1 : 0;
-    let by = y - bodyBounce;
-
-    let spriteImg: CanvasImageSource | null = null;
-    if (sectId) {
-      spriteImg = playerSectSpritesRef.current[sectId] || playerSpriteRef.current;
-    } else if (isBoss) {
-      spriteImg = bossSpriteRef.current;
-    } else {
-      spriteImg = mobSpriteRef.current;
-    }
-
-    if (spriteImg) {
-      ctx.save();
-      const spriteW = sz * 2.8;
-      const spriteH = sz * 2.8;
-      
-      ctx.translate(x, y + sz * 0.3 - bodyBounce);
-      ctx.scale(facing, 1);
-      
-      ctx.drawImage(spriteImg, -spriteW / 2, -spriteH * 0.85, spriteW, spriteH);
-      
-      if (sectId) {
-        ctx.globalCompositeOperation = "color";
-        ctx.fillStyle = c;
-        ctx.globalAlpha = 0.25;
-        ctx.drawImage(spriteImg, -spriteW / 2, -spriteH * 0.85, spriteW, spriteH);
-        ctx.globalAlpha = 1.0;
-        ctx.globalCompositeOperation = "source-over";
-      }
-      
-      ctx.restore();
-    } else {
-      // Fallback Legs
-      let legPhase = 0;
-      if (moving) legPhase = Math.sin(time * 0.015) * sz * 0.4;
-      ctx.fillStyle = "#111";
-      ctx.fillRect(x - sz * 0.4 + legPhase, y + sz * 0.4, sz * 0.3, sz * 0.6);
-      ctx.fillRect(x + sz * 0.1 - legPhase, y + sz * 0.4, sz * 0.3, sz * 0.6);
-
-      // Fallback Body
-      ctx.fillStyle = c;
-      ctx.beginPath();
-      ctx.moveTo(x - sz * 0.8, by + sz * 0.8);
-      ctx.lineTo(x + sz * 0.8, by + sz * 0.8);
-      ctx.lineTo(x + sz * 0.6, by - sz * 0.2);
-      ctx.lineTo(x - sz * 0.6, by - sz * 0.2);
-      ctx.fill();
-
-      // Fallback Head
-      if (sectId) {
-        ctx.fillStyle = "#fce0cf";
-        ctx.beginPath();
-        ctx.arc(x, by - sz * 0.5, sz * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = isBoss ? "#8e44ad" : "#1a1a1a";
-        ctx.beginPath();
-        ctx.arc(x, by - sz * 0.6, sz * 0.55, Math.PI * 0.8, Math.PI * 2.2);
-        ctx.fill();
-      } else {
-        ctx.fillStyle = isBoss ? "#b71c1c" : c;
-        ctx.beginPath();
-        ctx.arc(x, by - sz * 0.5, sz * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // Weapon Animation (Arm and Physical features)
-    ctx.save();
-    let armPhase = moving ? Math.sin(time * 0.015) * sz * 0.4 : 0;
-    const hx = x + facing * sz * 0.6;
-    const hy = by + sz * 0.15;
-    const wx = x + facing * sz * 1.5;
-    const wy = by - sz * 0.3 + armPhase;
-    
-    // Draw back hand
-    ctx.fillStyle = sectId ? "#fce0cf" : (isBoss ? "#b71c1c" : c);
-    ctx.beginPath();
-    ctx.arc(hx, hy + sz * 0.2, sz * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    
-    if (sectId) {
-      // Draw arms / sleeves based on sect
-      ctx.strokeStyle = c;
-      ctx.lineWidth = sz * 0.4;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(x + facing * sz * 0.3, by + sz * 0.2);
-      ctx.lineTo(hx, hy + sz * 0.2);
-      ctx.stroke();
-
-      if (sectId === 'sl') {
-        const spinA = (time * 0.005) % (Math.PI * 2);
-        ctx.translate(wx, wy);
-        ctx.rotate(spinA);
-        ctx.strokeStyle = '#d4af37';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(-sz * 1.8, 0);
-        ctx.lineTo(sz * 1.8, 0);
-        ctx.stroke();
-        ctx.fillStyle = '#f39c12';
-        ctx.beginPath();
-        ctx.arc(-sz * 1.8, 0, sz * 0.3, 0, Math.PI * 2);
-        ctx.arc(sz * 1.8, 0, sz * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.rotate(-spinA);
-        ctx.translate(-wx, -wy);
-      } 
-      else if (sectId === 'vd' || sectId === 'cl' || sectId === 'nm' || sectId === 'ty') {
-        // Swordsmen sects
-        const swordColor = sectId === 'vd' ? '#3498db' : (sectId === 'nm' ? '#e91e63' : (sectId === 'cl' ? '#f1c40f' : '#00bcd4'));
-        
-        // Draw thicker outer glowing qi aura
-        ctx.save();
-        ctx.lineWidth = 5.5;
-        ctx.strokeStyle = swordColor;
-        ctx.globalAlpha = 0.45;
-        ctx.beginPath();
-        ctx.moveTo(hx, hy + sz * 0.2);
-        ctx.lineTo(wx, wy - sz * 0.5);
-        ctx.stroke();
-        ctx.restore();
-        
-        // Draw solid high-intensity core
-        ctx.lineWidth = 2.0;
-        ctx.strokeStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.moveTo(hx, hy + sz * 0.2);
-        ctx.lineTo(wx, wy - sz * 0.5);
-        ctx.stroke();
-        
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(hx + facing * 4, hy + sz * 0.2 - 4);
-        ctx.lineTo(hx + facing * 8, hy + sz * 0.2 + 4);
-        ctx.stroke();
-        
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x - facing * sz * 0.5, hy + sz * 0.2);
-        ctx.lineTo(x - facing * sz * 1.2, hy - sz * 0.8);
-        ctx.stroke();
-      } 
-      else if (sectId === 'cb' || sectId === 'nd') {
-        // Staff / Whip
-        const wColor = sectId === 'cb' ? '#27ae60' : '#9b59b6';
-        ctx.strokeStyle = wColor;
-        ctx.lineWidth = 4.5;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(hx, hy + sz * 0.2);
-        if (sectId === 'nd') {
-           ctx.quadraticCurveTo(wx, wy + sz, wx + facing * sz * 0.8, wy - sz * 0.6);
-        } else {
-           ctx.lineTo(wx + facing * sz * 0.5, wy - sz * 0.4);
-        }
-        ctx.stroke();
-        
-        ctx.fillStyle = sectId === 'cb' ? '#2ecc71' : '#8e44ad';
-        ctx.beginPath();
-        ctx.arc(wx + (sectId === 'cb' ? 0 : facing * sz * 0.8), wy - (sectId === 'cb' ? 0 : sz * 0.6), 4, 0, Math.PI * 2);
-        ctx.fill();
-      } 
-      else if (sectId === 'tm') {
-        // Hidden weapons / Bow
-        ctx.fillStyle = '#7f8c8d';
-        ctx.fillRect(hx, hy + sz * 0.2 - 3, sz * 1.2 * facing, 6);
-        ctx.fillStyle = '#8a2be2';
-        ctx.fillRect(hx + sz * 0.8 * facing, hy + sz * 0.2 - sz * 0.6, 4 * facing, sz * 1.2);
-      } 
-      else if (sectId === 'tv' || sectId === 'tn') {
-        // Spear / Heavy Halberd
-        const wColor = sectId === 'tv' ? '#f44336' : '#d35400';
-        ctx.strokeStyle = wColor;
-        ctx.lineWidth = 4;
-        const sLength = sz * 3.2;
-        const txPointX = hx + facing * sLength;
-        const txPointY = hy + sz * 0.2 - sz * 0.8;
-        
-        ctx.beginPath();
-        ctx.moveTo(hx - facing * sz, hy + sz * 0.2 + sz * 0.4);
-        ctx.lineTo(txPointX, txPointY);
-        ctx.stroke();
-        
-        ctx.fillStyle = wColor;
-        ctx.beginPath();
-        ctx.arc(txPointX - facing * sz * 0.3, txPointY + sz * 0.1, sz * 0.2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.moveTo(txPointX, txPointY);
-        ctx.lineTo(txPointX - facing * sz * 0.6, txPointY - sz * 0.2);
-        ctx.lineTo(txPointX - facing * sz * 0.6, txPointY + sz * 0.2);
-        ctx.closePath();
-        ctx.fill();
-      }
-    } else {
-      // Monster claws / weapons
-      ctx.strokeStyle = "#444";
-      ctx.lineWidth = isBoss ? 6 : 4;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(x + facing * sz * 0.4, by + sz * 0.2);
-      ctx.lineTo(wx, wy);
-      ctx.stroke();
-      
-      // Giant spiked club for bosses
-      if (isBoss) {
-        ctx.fillStyle = "#8d6e63";
-        ctx.beginPath();
-        ctx.ellipse(wx, wy - sz * 0.4, sz * 0.6, sz * 1.0, facing > 0 ? 0.2 : -0.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#fff";
-        for(let i=0; i<3; i++) {
-           ctx.beginPath();
-           ctx.arc(wx + (Math.random()-0.5)*sz*0.6, wy - sz*0.4 + (Math.random()-0.5)*sz*0.8, sz*0.15, 0, Math.PI*2);
-           ctx.fill();
-        }
-      }
-    }
-    
-    // Front hand over weapon
-    ctx.fillStyle = sectId ? "#fce0cf" : (isBoss ? "#b71c1c" : c);
-    ctx.beginPath();
-    ctx.arc(hx + facing * sz * 0.2, hy + sz * 0.2, sz * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.restore();
-  };
-
-  const getBossCount = (stage: number): number => {
-    if (stage < 10) return 1;
-    const exp = Math.floor(stage / 10);
-    return Math.pow(2, exp);
-  };
-
-  const getMobsTotal = (stage: number): number => {
-    const baseMobs = 10 + stage * 2;
-    const bosses = getBossCount(stage);
-    return baseMobs + bosses * 24;
-  };
-
-  const spawnWave = () => {
-    const stage = stateRef.current.stage;
-    // Scale strength multiplier only on stages 10 and above
-    const strengthMult = stage >= 10 ? (1 + getBossCount(stage) * 0.15) : 1.0;
-    const stage20Boost = stage > 20 ? (1.3 + (stage - 20) * 0.05) : 1.0;
-
-    const hpBase = 24 * Math.pow(1.15, stage - 1) * strengthMult * stage20Boost;
-    const atkBase = 3.2 * Math.pow(1.095, stage - 1) * strengthMult * (stage > 20 ? 1.25 : 1.0);
-    const newEntities: Entity[] = [];
-
-    // Số đợt quái tăng đột khởi dồn dập sau stage 20
-    const spawnCount = stage > 20 ? Math.min(22, 6 + Math.floor((stage - 20) * 1.5)) : 6;
-    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
-
-    for (let i = 0; i < spawnCount; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 300 + Math.random() * 300;
-      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      newEntities.push({
-        id: Math.random(),
-        isBoss: false,
-        x: stateRef.current.player.x + Math.cos(angle) * dist,
-        y: stateRef.current.player.y + Math.sin(angle) * dist,
-        hp: hpBase,
-        maxHp: hpBase,
-        atk: atkBase,
-        speed: (50 + Math.random() * 30) * (stage > 20 ? 1.3 : 1.0),
-        size: 16,
-        atkCd: 0,
-        color: stage > 20 ? "#8e44ad" : "#7f8c8d",
-        element: el,
-      });
-    }
-    entitiesRef.current = [...entitiesRef.current, ...newEntities];
-  };
-
-  const spawnSubBosses = (count: number, stage: number) => {
-    const actualSubBossCount = stage > 20 ? count + 1 : count;
-    const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.25) * (stage > 20 ? 1.5 : 1.0);
-    const hpBase = 110 * Math.pow(1.18, stage - 1) * scaleFactor;
-    const atkBase = 11 * Math.pow(1.14, stage - 1) * scaleFactor;
-    const size = Math.min(45, Math.floor(20 * scaleFactor));
-
-    const p = stateRef.current.player;
-    const newBosses: Entity[] = [];
-    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
-    const nameElPrefixes = { Metal: '[KIM]', Wood: '[MỘC]', Water: '[THỦY]', Fire: '[HỎA]', Earth: '[THỔ]' };
-
-    for (let i = 0; i < actualSubBossCount; i++) {
-      const angle = (Math.PI * 2 / actualSubBossCount) * i;
-      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      const prefix = nameElPrefixes[el];
-      newBosses.push({
-        id: Math.random(),
-        isBoss: false,
-        isSubBoss: true,
-        name: stage > 20 ? `${prefix} 🔴 Tam Ma Vương Hộ Pháp ${i + 1}` : `${prefix} Tịnh Vương Hộ Pháp ${i + 1}`,
-        x: p.x + Math.cos(angle) * 320,
-        y: p.y + Math.sin(angle) * 320,
-        hp: hpBase,
-        maxHp: hpBase,
-        atk: atkBase,
-        speed: stage > 20 ? 100 : 75,
-        size,
-        atkCd: 0,
-        color: stage > 20 ? "#d35400" : "#16a085",
-        element: el,
-      });
-    }
-
-    entitiesRef.current = [...entitiesRef.current, ...newBosses];
-    addNotification(`⚔️ KHAI CHIẾN ${actualSubBossCount} HỘ PHÁP THỦ LĨNH!`, stage > 20 ? "#d35400" : "#16a085");
-  };
-
-  const WUXIA_BOSS_NAMES = [
-    "Kiều Phong", "Dương Quá", "Lệnh Hồ Xung", "Trương Vô Kỵ", 
-    "Đông Phương Bất Bại", "Hoàng Dược Sư", "Âu Dương Phong", 
-    "Hồng Thất Công", "Đoàn Trí Hưng", "Quách Tĩnh", "Cô Long", 
-    "Độc Cô Cầu Bại", "Nhậm Ngã Hành", "Vô Nhai Tử", "Thiên Sơn Đồng Lão"
-  ];
-
-  const spawnFinalBosses = (count: number, stage: number) => {
-    const isLateGame = stage > 20;
-    const scaleFactor = (1 + Math.floor((stage - 1) / 5) * 0.35) * (isLateGame ? 1.6 : 1.0);
-    const hpBase = 220 * Math.pow(1.21, stage - 1) * scaleFactor;
-    const atkBase = 18 * Math.pow(1.16, stage - 1) * scaleFactor;
-    const size = Math.min(75, Math.floor(26 * scaleFactor));
-
-    const p = stateRef.current.player;
-    const newBosses: Entity[] = [];
-    const ELEMENTS: ("Metal" | "Wood" | "Water" | "Fire" | "Earth")[] = ["Metal", "Wood", "Water", "Fire", "Earth"];
-    const nameElPrefixes = { Metal: '[KIM]', Wood: '[MỘC]', Water: '[THỦY]', Fire: '[HỎA]', Earth: '[THỔ]' };
-
-    for (let i = 0; i < count; i++) {
-      const angle = (Math.PI * 2 / count) * i;
-      const el = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      const prefix = nameElPrefixes[el];
-      const randomWuxiaName = WUXIA_BOSS_NAMES[Math.floor(Math.random() * WUXIA_BOSS_NAMES.length)];
-      
-      newBosses.push({
-        id: Math.random(),
-        isBoss: true,
-        name: isLateGame ? `${prefix} 🔥 TÔNG TƯ THẦN - ${randomWuxiaName}` : `${prefix} ${randomWuxiaName}`,
-        x: p.x + Math.cos(angle) * 350,
-        y: p.y + Math.sin(angle) * 350,
-        hp: hpBase,
-        maxHp: hpBase,
-        atk: atkBase,
-        speed: isLateGame ? 95 : 68,
-        size,
-        atkCd: 0,
-        color: isLateGame ? "#9b59b6" : "#c0392b",
-        element: el,
-      });
-    }
-
-    entitiesRef.current = [...entitiesRef.current, ...newBosses];
-    addNotification(isLateGame ? "🔥 VÔ THỰNG CHI CHỦ DIÊM LA DIỆU THẾ XUẤT HIỆN!" : "👑 THẦN ĐIỆN CHIẾN BOSS CUỐI XUẤT HIỆN!", "#c0392b");
-  };
-
   const update = (dt: number) => {
     if (gameState.state !== "PLAYING") return;
 
     setStateAsync((prev) => {
       if (!prev) return null;
-      const p = { ...prev.player };
-      const buffs = prev.buffs;
+      let current = { ...prev };
 
-      // Banner aura passive damage effect
-      if (p.equipment.banner && !p.dead) {
-        if (!p.atkCd) p.atkCd = 0; // abuse unused field to tick down aura
-        // Tick down a small custom count or manual count
-        // Let's declare aura timer ref or track elapsed
+      // Tick Combo timers and history if player alive
+      if (!current.player.dead) {
+        tickCombo(current, dt);
       }
 
-      // Regains & Five Elements Burst Mode Tick
-      if (!p.dead) {
-        if (p.comboTimer && p.comboTimer > 0) {
-          p.comboTimer -= dt;
-          if (p.comboTimer <= 0) {
-            p.skillComboHistory = [];
-          }
-        }
-        if (p.activeCombo && p.activeCombo.timer > 0) {
-          p.activeCombo.timer -= dt;
-          if (p.activeCombo.timer <= 0) {
-            p.activeCombo = null;
-          }
-        }
-
-        if (p.rageActive) {
-          p.rageTimer = Math.max(0, (p.rageTimer || 8.0) - dt);
-          p.rage = Math.floor((p.rageTimer / 8.0) * (p.maxRage || 100));
-          
-          // Balanced continuous regeneration inside rage mode (0.6% Max HP + scaled stats)
-          p.hp = Math.min(p.maxHp, p.hp + (p.maxHp * 0.006 + p.currentStats.con * 0.4 + 1.2) * dt);
-          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 0.8 + 2.5) * dt);
-          
-          // Generate customized Elemental trail particles surrounding player!
-          if (Math.random() < 0.4) {
-            const sectId = getSectIdFromColor(p.color);
-            const playerEl = getSectElement(sectId);
-            const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
-            const particleColor = elColor[playerEl] || '#fff';
-            
-            const radius = 25 + Math.random() * 20;
-            const angle = Math.random() * Math.PI * 2;
-            particlesRef.current.push({
-              x: p.x + Math.cos(angle) * radius,
-              y: p.y + Math.sin(angle) * radius,
-              vx: -Math.sin(angle) * 70,
-              vy: Math.cos(angle) * 70,
-              life: 0.6,
-              color: particleColor,
-              size: 3 + Math.random() * 2,
-            });
-          }
-          
-          if (p.rageTimer <= 0) {
-            p.rageActive = false;
-            p.rage = 0;
-            addNotification("🛡️ Trạng thái bộc phát Ngũ Hành kết thúc!", "#95a5a6");
-          }
-        } else {
-          // Balanced, challenging normal-state recovery
-          p.hp = Math.min(p.maxHp, p.hp + (p.currentStats.con * 0.15 + 0.4) * dt);
-          p.mp = Math.min(p.maxMp, p.mp + (p.currentStats.nei * 0.35 + 0.6) * dt);
-          
-          if (p.rage >= (p.maxRage || 100)) {
-            p.rageActive = true;
-            p.rageTimer = 8.0;
-            p.rage = p.maxRage || 100;
-            shakeRef.current = 15;
-            
-            // Spawn spectacular shockwave ring upon burst!
-            particlesRef.current.push({
-              x: p.x, y: p.y, vx: 0, vy: 0, life: 1.0, maxLife: 1.0, color: p.color, size: 25, type: 'ring'
-            });
-            particlesRef.current.push({
-              x: p.x, y: p.y, vx: 0, vy: 0, life: 0.6, maxLife: 0.6, color: '#ffffff', size: 12, type: 'shockwave'
-            });
-          }
-        }
-
-        // Decay Combo active state
-        if (p.activeCombo) {
-          p.comboTimer = Math.max(0, (p.comboTimer || 0) - dt);
-          if (p.comboTimer <= 0) {
-            p.activeCombo = null;
-          }
-        }
+      // 1. Tick Player State (Regeneration, active rage burst, banner passive, death waits/revival)
+      const playerResult = tickPlayerState(current, dt, particlesRef.current, {
+        addNotification,
+        shakeRef,
+      });
+      if (playerResult) {
+        return playerResult; // Returns updated revived state, or game over state
       }
 
-      // Death wait
-      if (p.dead) {
-        p.atkCd -= dt;
-        if (p.atkCd <= 0) {
-          if (prev.lives > 0) {
-            addNotification("Tái xuất giang hồ!", "#2ecc71");
-            return {
-              ...prev,
-              lives: prev.lives - 1,
-              player: {
-                ...p,
-                dead: false,
-                hp: p.maxHp * 0.8,
-                mp: p.maxMp * 0.5,
-                x: MAP_SIZE / 2,
-                y: MAP_SIZE / 2,
-                target: null,
-              },
-            };
-          } else {
-            return { ...prev, state: "GAMEOVER" };
-          }
-        }
-        return { ...prev, player: p };
+      // 2. Tick Stage State (Waves, sub bosses, final bosses, clearance)
+      const stageResult = tickStageState(current, entitiesRef.current, {
+        addNotification,
+      });
+      if (stageResult.nextState) {
+        return { ...current, state: stageResult.nextState };
       }
-
-      // Stage management
-      const mobsNeeded = prev.mobsTotal;
-      const mobsKilled = prev.mobsKilled;
-      const entitiesCount = entitiesRef.current.length;
-      let nextPhase = prev.stagePhase || 'CREEPS';
-      let bossSpawned = prev.bossSpawned;
-
-      if (nextPhase === 'CREEPS') {
-        if (entitiesCount < 4 && mobsKilled + entitiesCount < mobsNeeded) {
-          spawnWave();
-        }
-        if (mobsKilled >= mobsNeeded) {
-          nextPhase = 'SUB_BOSSES';
-          const totalBosses = getBossCount(prev.stage);
-          // if there are 4+ bosses, spawn 2 as sub-bosses first. If 8, spawn 4, etc. Otherwise spawn 1.
-          const subBossCount = totalBosses >= 4 ? Math.floor(totalBosses / 2) : 1;
-          spawnSubBosses(subBossCount, prev.stage);
-        }
-      } else if (nextPhase === 'SUB_BOSSES') {
-        if (entitiesCount === 0) {
-          nextPhase = 'FINAL_BOSS';
-          bossSpawned = true;
-          const totalBosses = getBossCount(prev.stage);
-          const finalBossCount = totalBosses >= 4 ? Math.ceil(totalBosses / 2) : totalBosses;
-          spawnFinalBosses(finalBossCount, prev.stage);
-        }
-      } else if (nextPhase === 'FINAL_BOSS') {
-        if (entitiesCount === 0 && bossSpawned) {
-          return { ...prev, state: "CLEARED" };
-        }
+      if (stageResult.newEntities) {
+        entitiesRef.current = [...entitiesRef.current, ...stageResult.newEntities];
       }
+      current.stagePhase = stageResult.stagePhase;
+      current.bossSpawned = stageResult.bossSpawned;
 
-      // Auto target
-      if (prev.auto && !p.target && !p.moving) {
-        let minDist = 400;
-        let nearest: Entity | null = null;
-        entitiesRef.current.forEach((e) => {
-          const d = Math.hypot(p.x - e.x, p.y - e.y);
-          if (d < minDist) {
-            minDist = d;
-            nearest = e;
-          }
-        });
-        p.target = nearest;
-      }
+      // 3. Tick Movement
+      tickMovement(current, dt, entitiesRef.current);
 
-      // Movement & Auto Attack
-      if (p.target) {
-        const t = entitiesRef.current.find((e) => e.id === p.target?.id);
-        if (!t) {
-          p.target = null;
-        } else {
-          const d = Math.hypot(p.x - t.x, p.y - t.y);
-          p.facing = t.x > p.x ? 1 : -1;
-          if (d > p.radius + t.size + 20) {
-            const dx = t.x - p.x;
-            const dy = t.y - p.y;
-            p.x += (dx / d) * p.speed * dt;
-            p.y += (dy / d) * p.speed * dt;
-            p.moving = true;
-          } else {
-            p.moving = false;
-            p.atkCd -= dt;
-            if (p.atkCd <= 0) {
-              p.atkCd = Math.max(0.3, 1.2 - p.currentStats.agi * 0.05);
-              doDamage(t, p.atk, "#fff", p.x, p.y);
-            }
-          }
-        }
-      } else if (p.moving) {
-        const d = Math.hypot(p.targetX - p.x, p.targetY - p.y);
-        p.facing = p.targetX > p.x ? 1 : -1; // Update facing direction based on click
-        if (d > 10) {
-          p.x += ((p.targetX - p.x) / d) * p.speed * dt;
-          p.y += ((p.targetY - p.y) / d) * p.speed * dt;
-        } else {
-          p.moving = false;
-        }
-      }
-
-      // Enemy AI
-      entitiesRef.current.forEach((e) => {
-        e.atkCd -= dt;
-        const d = Math.hypot(e.x - p.x, e.y - p.y);
-        if (d > p.radius + e.size + 5) {
-          e.x += ((p.x - e.x) / d) * e.speed * dt;
-          e.y += ((p.y - e.y) / d) * e.speed * dt;
-        } else if (e.atkCd <= 0) {
-          e.atkCd = 1.5;
-          const dmg = Math.max(1, e.atk - p.currentStats.con);
-          p.hp -= dmg;
-          textsRef.current.push({
-            id: Math.random(),
-            x: p.x,
-            y: p.y - 30,
-            text: `-${Math.floor(dmg)}`,
-            color: "#e74c3c",
-            life: 1,
-          });
-          if (p.hp <= 0) {
-            p.dead = true;
-            p.atkCd = 3;
-          }
-        }
+      // 4. Tick Combat (Basic attacks, enemy AI, mob cleanup)
+      tickCombat(current, dt, entitiesRef.current, particlesRef.current, textsRef.current, {
+        addNotification,
+        generateDrop: (x, y, isBoss, stage) => generateDrop(x, y, isBoss, stage, dropsRef.current),
+        shakeRef,
+        frameTotalDmgRef,
       });
 
-      // Skill Cooldowns & Auto-cast
-      let firedSkillIdx = -1;
-      const newSkills = prev.skills.map((sk, idx) => {
-        let sc = { ...sk };
-        if (sc.cooldownLeft > 0) {
-          sc.cooldownLeft = Math.max(0, sc.cooldownLeft - dt);
-        }
-        
-        // Priority auto cast from ultimate (idx 2) to normal (idx 0)
-        // Handled outside this map? Wait, we can just find which to cast after mapping
-        return sc;
+      const finalGold = current.gold;
+      const finalExp = current.exp;
+      const finalCompanion = current.companion;
+      const finalMobsKilled = current.mobsKilled;
+      const finalQuests = current.quests;
+      const finalManuals = current.manuals;
+
+      // 5. Tick Skills (Cooldown, casting, skill damage)
+      const newSkills = tickSkills(current, dt, entitiesRef.current, particlesRef.current, textsRef.current, {
+        addNotification,
+        shakeRef,
+        frameTotalDmgRef,
       });
 
-      // Auto-cast highest available skill
-      if (prev.auto && p.target && !p.dead) {
-        const targetEntity = entitiesRef.current.find(e => e.id === p.target?.id);
-        if (targetEntity) {
-          const distanceToTarget = Math.hypot(p.x - targetEntity.x, p.y - targetEntity.y);
-          for (let idx = newSkills.length - 1; idx >= 0; idx--) {
-            const sk = newSkills[idx];
-            const actualRange = sk.range + (buffs.skillRangeBonus || 0);
-            
-            // Chí mạng: Chỉ xả tuyệt chiêu khi đối tượng đã nằm vào trong tầm sát thương
-            if (sk.level > 0 && sk.cooldownLeft <= 0 && p.mp >= sk.manaCost && distanceToTarget <= actualRange + 30) {
-              firedSkillIdx = idx;
-              break;
-            }
-          }
-        }
-      }
+      // 6. Tick Item Pickups
+      const goldEarned = tickDrops(current, dropsRef.current, {
+        addNotification,
+      });
 
-      if (firedSkillIdx !== -1) {
-        const sk = newSkills[firedSkillIdx];
-        sk.cooldownLeft = sk.cooldown * (1 - buffs.cdReduc);
-        p.mp -= sk.manaCost;
-
-        const tx = p.target ? p.target.x : p.x + p.facing * 120;
-        const ty = p.target ? p.target.y : p.y;
-        
-        shakeRef.current = (firedSkillIdx + 1) * 7;
-        const actualRange = sk.range + (buffs.skillRangeBonus || 0);
-        
-        // Base shockwave and ring
-        particlesRef.current.push({
-          x: tx, y: ty, vx: 0, vy: 0, life: 0.5 + firedSkillIdx * 0.15, maxLife: 0.5 + firedSkillIdx * 0.15, color: sk.color, size: 10, type: 'ring'
-        });
-        particlesRef.current.push({
-          x: tx, y: ty, vx: 0, vy: 0, life: 0.3, maxLife: 0.3, color: '#ffffff', size: 5, type: 'shockwave'
-        });
-
-        if (firedSkillIdx === 0) {
-          // Tier 1: Fast basic hit, some sparks
-          for (let i = 0; i < 15; i++) {
-            const ang = Math.random() * Math.PI * 2;
-            const speed = 100 + Math.random() * 200;
-            particlesRef.current.push({
-              x: tx, y: ty,
-              vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
-              life: 0.3 + Math.random() * 0.2,
-              color: Math.random() > 0.3 ? sk.color : '#ffffff',
-              size: 2 + Math.random() * 3,
-              type: 'trail'
-            });
-          }
-        } else if (firedSkillIdx === 1) {
-          // Tier 2: Pillar and falling swords
-          particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 0.6, maxLife: 0.6, color: sk.color, size: actualRange / 3, type: 'pillar'
-          });
-          for (let i = 0; i < 8; i++) {
-             particlesRef.current.push({
-                x: tx + (Math.random() - 0.5) * actualRange, 
-                y: ty - 300 - Math.random() * 200, 
-                vx: 0, vy: 800 + Math.random() * 400,
-                life: 0.8,
-                color: sk.color,
-                size: 15 + Math.random() * 10,
-                type: 'sword',
-                rotation: Math.random() * 0.2 - 0.1
-             });
-          }
-        } else if (firedSkillIdx === 2) {
-          // Tier 3: Ultimate explosion
-          particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 1, maxLife: 1, color: sk.color, size: actualRange / 1.5, type: 'pillar'
-          });
-          particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 0.8, maxLife: 0.8, color: '#ffffff', size: 10, type: 'ring'
-          });
-          
-          for (let i = 0; i < 40; i++) {
-            const ang = Math.random() * Math.PI * 2;
-            const speed = 200 + Math.random() * 400;
-            particlesRef.current.push({
-              x: tx, y: ty,
-              vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
-              life: 0.5 + Math.random() * 0.5,
-              color: Math.random() > 0.4 ? sk.color : '#ffffff',
-              size: 3 + Math.random() * 5,
-              type: 'trail'
-            });
-          }
-          for (let i = 0; i < 15; i++) {
-             particlesRef.current.push({
-                x: tx + (Math.random() - 0.5) * actualRange * 1.5, 
-                y: ty - 400 - Math.random() * 300, 
-                vx: 0, vy: 1000 + Math.random() * 500,
-                life: 1,
-                color: '#ffffff',
-                size: 20 + Math.random() * 15,
-                type: 'sword',
-                rotation: Math.random() * 0.4 - 0.2
-             });
-          }
-        } else if (firedSkillIdx === 3) {
-          // Tier 4: Laser Beam Energy Sweep
-          for (let sweep = -30; sweep <= 30; sweep += 15) {
-             particlesRef.current.push({
-               x: tx, y: ty + sweep, vx: 0, vy: 0, life: 0.5, maxLife: 0.5, color: sk.color, size: 25, type: 'beam'
-             });
-          }
-          for (let i = 0; i < 20; i++) {
-            const ang = Math.random() * Math.PI * 2;
-            particlesRef.current.push({
-              x: tx + (Math.random() - 0.5) * actualRange, y: ty + (Math.random() - 0.5) * 40,
-              vx: Math.cos(ang) * 150, vy: Math.sin(ang) * 150,
-              life: 0.4, color: '#ffffff', size: 3, type: 'trail'
-            });
-          }
-        } else if (firedSkillIdx === 4) {
-          // Tier 5: Celestial Lightning Storm
-          for (let i = 0; i < 5; i++) {
-             const offsetAngle = Math.random() * Math.PI * 2;
-             const offsetDist = Math.random() * actualRange * 0.8;
-             const lx = tx + Math.cos(offsetAngle) * offsetDist;
-             const ly = ty + Math.sin(offsetAngle) * offsetDist;
-             particlesRef.current.push({
-               x: lx, y: ly, vx: 0, vy: 0, life: 0.4, maxLife: 0.4, color: '#3498db', size: 8, type: 'lightning'
-             });
-          }
-        } else if (firedSkillIdx === 5) {
-          // Tier 6: Supreme Gold Dragon Vortex
-          particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 1.5, maxLife: 1.5, color: '#f1c40f', size: actualRange, type: 'ring'
-          });
-          particlesRef.current.push({
-            x: tx, y: ty, vx: 0, vy: 0, life: 1.2, maxLife: 1.2, color: '#e67e22', size: actualRange * 0.7, type: 'ring'
-          });
-          for (let i = 0; i < 60; i++) {
-            const spinA = Math.random() * Math.PI * 2;
-            const radius = Math.random() * actualRange;
-            const pxPos = tx + Math.cos(spinA) * radius;
-            const pyPos = ty + Math.sin(spinA) * radius;
-            // orbital velocity vector
-            const vx = -Math.sin(spinA) * 200;
-            const vy = Math.cos(spinA) * 200;
-            particlesRef.current.push({
-              x: pxPos, y: pyPos, vx, vy, life: 0.8 + Math.random() * 0.4, color: Math.random() > 0.5 ? '#f1c40f' : '#e74c3c', size: 4 + Math.random() * 4, type: 'trail'
-            });
-          }
-        }
-        
-        const combo = checkAndTriggerCombo(
-          firedSkillIdx,
-          p,
-          tx,
-          ty,
-          actualRange,
-          particlesRef.current,
-          textsRef.current,
-          shakeRef
-        );
-        const comboMult = combo ? combo.multiplier : 1.0;
-        const damage = (sk.baseDamage + sk.level * 25 + p.currentStats.int * 5) * buffs.dmgMult * comboMult;
-        const sectId = getSectIdFromColor(p.color);
-        const playerEl = getSectElement(sectId);
-        
-        entitiesRef.current.forEach(e => {
-          const dist = Math.hypot(e.x - tx, e.y - ty);
-          if (dist <= actualRange) {
-            const elementInfo = getElementalMultipliers(playerEl, e.element);
-            const isCrit = Math.random() < (0.10 + p.currentStats.agi * 0.005 + (buffs.critChanceBonus || 0));
-            
-            let elementalDamage = damage * elementInfo.mult;
-            if (p.rageActive) elementalDamage *= 1.5; // active burst 1.5x damage!
-            
-            let d = Math.max(1, Math.floor(elementalDamage * (0.8 + Math.random() * 0.4)));
-            if (isCrit) {
-              const Math_floor = Math.floor;
-              const critDb = buffs.critDmgMult || 1.5;
-              d = Math_floor(d * critDb);
-            }
-            
-            // Lifesteal
-            if (buffs.lifeSteal) {
-              const heal = Math.floor(d * buffs.lifeSteal);
-              if (heal > 0 && p.hp < p.maxHp) {
-                p.hp = Math.min(p.maxHp, p.hp + heal);
-                textsRef.current.push({
-                  id: Math.random(),
-                  x: p.x,
-                  y: p.y - 20,
-                  text: `+${heal}`,
-                  color: "#2ecc71",
-                  life: 1,
-                });
-              }
-            }
-            
-            // Accumulate player rage on skill target hit
-            if (!p.dead && !p.rageActive) {
-              let accum = 1;
-              if (isCrit) accum += 1; // Crit bonus
-              if (e.hp - d <= 0) accum += 2; // Kill bonus
-              p.rage = Math.min(p.maxRage, p.rage + accum);
-            }
-
-            e.hp -= d;
-            
-            // Build element-themed notification text
-            const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
-            const elName = { Metal: 'KIM', Wood: 'MỘC', Water: 'THỦY', Fire: 'HỎA', Earth: 'THỔ' };
-            
-            let skillText = isCrit ? `💥 CHÍ MẠNG! -${d}` : `-${d}`;
-            let skillColor = isCrit ? '#f1c40f' : sk.color;
-            
-            if (combo) {
-              skillText = isCrit ? `🔥 COMBO CRIT! -${d}` : `🔥 COMBO! -${d}`;
-              skillColor = combo.color;
-            } else if (elementInfo.mult > 1.0) {
-              skillText = isCrit ? `💥 KHẮC CHẾ CRIT! -${d}` : `⚡ ${elName[playerEl]} KHẮC! -${d}`;
-              skillColor = elColor[playerEl];
-            } else if (p.rageActive) {
-              skillText = isCrit ? `🔥 BỘC PHÁT CRIT! -${d}` : `🔥 BỘC PHÁT! -${d}`;
-              skillColor = '#ff4d00';
-            }
-            
-            if (textsRef.current.length < 35) {
-              textsRef.current.push({
-                id: Math.random(),
-                x: e.x + (Math.random() - 0.5) * 20,
-                y: e.y - 20 - Math.random() * 20,
-                text: skillText,
-                color: skillColor,
-                life: isCrit ? 1.8 : 1.5
-              });
-            } else {
-              frameTotalDmgRef.current += d;
-            }
-          }
-        });
-      }
-
-
-      // Item Pickup (Wide auto-loot range 180px & +15% gold boost if companion is active)
-      let goldEarned = 0;
-      const pickupRange = prev.companion ? 180 : 50;
-      for (let i = dropsRef.current.length - 1; i >= 0; i--) {
-        const d = dropsRef.current[i];
-        if (Math.hypot(p.x - d.x, p.y - d.y) < pickupRange) {
-          const goldVal = equipItem(d, p, buffs, prev.stage, prev.manuals);
-          const boostedGold = prev.companion ? Math.floor(goldVal * 1.15) : goldVal;
-          goldEarned += boostedGold;
-          dropsRef.current.splice(i, 1);
-        }
-      }
-
-      return { ...prev, player: p, skills: newSkills, gold: prev.gold + goldEarned, stagePhase: nextPhase, bossSpawned };
+      return {
+        ...current,
+        skills: newSkills,
+        gold: finalGold + goldEarned,
+        exp: finalExp,
+        companion: finalCompanion,
+        mobsKilled: finalMobsKilled,
+        quests: finalQuests,
+        manuals: finalManuals,
+      };
     });
 
     // Sub-updates for refs
@@ -1452,453 +321,8 @@ export default function GameCanvas({
     if (shakeRef.current > 0) shakeRef.current -= dt * 10;
   };
 
-  const doDamage = (
-    e: Entity,
-    amt: number,
-    col: string,
-    srcX: number,
-    srcY: number,
-  ) => {
-    const pRef = stateRef.current.player;
-    const sectId = getSectIdFromColor(pRef.color);
-    const playerEl = getSectElement(sectId);
-    const elementInfo = getElementalMultipliers(playerEl, e.element);
-    
-    // Sát thương nhân sắc Sinh Khắc (Omega)
-    const elementalDamage = amt * elementInfo.mult;
-    
-    // Burst Mode (Rage active) confers 1.5x damage supercharge!
-    const burstMult = pRef.rageActive ? 1.5 : 1.0;
-    const finalDamage = Math.max(1, Math.floor(elementalDamage * burstMult * (0.8 + Math.random() * 0.4)));
 
-    // Accumulate player Rage point
-    if (!pRef.dead && !pRef.rageActive) {
-      let accum = 1; // Base hit
-      if (e.hp - finalDamage <= 0) accum += 2; // Kill bonus
-      pRef.rage = Math.min(pRef.maxRage, pRef.rage + accum);
-    }
 
-    e.hp -= finalDamage;
-
-    // Build themed damage outputs
-    const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
-    const elName = { Metal: 'KIM', Wood: 'MỘC', Water: 'THỦY', Fire: 'HỎA', Earth: 'THỔ' };
-    
-    let dmgText = finalDamage.toString();
-    let txtColor = col;
-    
-    if (elementInfo.mult > 1.0) {
-      dmgText = `⚡ ${elName[playerEl]} KHẮC! -${finalDamage}`;
-      txtColor = elColor[playerEl];
-    } else if (elementInfo.mult < 1.0) {
-      dmgText = `🛡️ BỊ KHẮC -${finalDamage}`;
-      txtColor = '#7f8c8d';
-    } else {
-      txtColor = elColor[playerEl] || col;
-    }
-
-    if (pRef.rageActive) {
-      dmgText = `🔥 BỘC PHÁT! -${finalDamage}`;
-      txtColor = '#ff3300';
-    }
-
-    if (textsRef.current.length < 35) {
-      textsRef.current.push({
-        id: Math.random(),
-        x: e.x,
-        y: e.y - 30,
-        text: dmgText,
-        color: txtColor,
-        life: pRef.rageActive ? 1.6 : 1.2,
-      });
-    } else {
-      frameTotalDmgRef.current += finalDamage;
-    }
-
-    // Spawn extremely smooth, animated Cocos-Engine Custom Label
-    const cocosLabel = new cc.Label(dmgText, pRef.rageActive ? 17 : 13, txtColor);
-    cocosLabel.x = e.x;
-    cocosLabel.y = e.y - 30;
-    cocosLabel.strokeColor = "#0a0a0a";
-    cocosLabel.strokeWidth = 3.5;
-    cocosLabel.fontFamily = "system-ui, -apple-system, sans-serif";
-    
-    const distanceUp = -50 - Math.random() * 30;
-    const animDuration = pRef.rageActive ? 1.3 : 0.95;
-    cocosLabel.runAction(
-      cc.sequence(
-        cc.moveTo(animDuration, e.x, e.y - 30 + distanceUp),
-        cc.callFunc(() => {
-          cocosSceneRef.current.removeChild(cocosLabel);
-        })
-      )
-    );
-    cocosLabel.runAction(cc.fadeTo(animDuration, 0));
-    cocosSceneRef.current.addChild(cocosLabel);
-
-    // Particles themed by Element or default
-    const particleColor = elColor[playerEl] || col;
-    
-    // Trigger Cocos-based Particle System for premium rendering spark impacts
-    cocosParticlesRef.current.spawn(e.x, e.y, particleColor, pRef.rageActive ? 3.5 : 2.5, pRef.rageActive ? 14 : 7);
-    if (particlesRef.current.length < 120) {
-      for (let i = 0; i < (pRef.rageActive ? 8 : 5); i++) {
-        const angle =
-          Math.atan2(e.y - srcY, e.x - srcX) + (Math.random() - 0.5);
-        const speed = (pRef.rageActive ? 220 : 150) + Math.random() * 80;
-        particlesRef.current.push({
-          x: e.x,
-          y: e.y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          life: 0.5,
-          color: particleColor,
-          size: pRef.rageActive ? 3.5 : 2,
-        });
-      }
-    }
-
-    if (e.hp <= 0) {
-      if (e.isBoss) shakeRef.current = 10;
-
-      setStateAsync((prev) => {
-        if (!prev) return null;
-        // Thiết kế tinh tế: Giảm thiểu lạm phát vàng ở các stage sau bằng Gold Decay và nén cơ số tích luỹ
-        const goldDecayFactor = prev.stage > 12 
-          ? Math.max(0.12, 1 - (prev.stage - 12) * 0.04) 
-          : 1.0;
-          
-        const goldGain = Math.floor(
-          (e.isBoss ? 50 : 5) *
-            Math.pow(1.11, prev.stage) * // Giảm nhẹ từ 1.2 xuống 1.11 tránh over-power
-            prev.buffs.resMult *
-            prev.buffs.rlGold *
-            goldDecayFactor
-        );
-        const compExist = prev.companion !== null && prev.companion !== undefined;
-        const expGain = Math.floor(
-          (e.isBoss ? 100 : 15) *
-          Math.pow(1.1, prev.stage) *
-          prev.buffs.resMult *
-          prev.buffs.rlExp *
-          (compExist ? 1.15 : 1.0)
-        );
-
-        let newExp = prev.exp + expGain;
-        let newLevel = prev.player.level;
-        let newStatPts = prev.player.statPoints;
-        let newSkillPts = prev.player.skillPoints;
-
-        let maxExp = Math.floor(100 * Math.pow(1.2, newLevel - 1));
-        let leveledUp = false;
-        while (newExp >= maxExp) {
-          newExp -= maxExp;
-          newLevel++;
-          newStatPts += 5;
-          if (newLevel % 3 === 0) newSkillPts++;
-          leveledUp = true;
-          maxExp = Math.floor(100 * Math.pow(1.2, newLevel - 1));
-        }
-        
-        if (leveledUp && newLevel % 5 === 0) {
-          addNotification(`⚡ LÊN CẤP ${newLevel}!`, "#f1c40f");
-        }
-
-        // 1. Award Sect-specific Martial manual (Bí kíp) level benchmarks (20, 40, 60)
-        let manuals = [...(prev.manuals || [])];
-        if (newLevel > prev.player.level && [20, 40, 60].includes(newLevel)) {
-          const sectId = prev.player.sectId || 'sl';
-          const list = SECT_LEVEL_MANUALS[sectId];
-          const manualTemplateIndex = Math.floor(newLevel / 20) - 1; // 0 for lvl 20, 1 for lvl 40, etc
-          if (list && list[manualTemplateIndex]) {
-            const template = list[manualTemplateIndex];
-            const newManual: MartialManual = {
-              id: `manual_lvl_${sectId}_${newLevel}`,
-              name: `📚 ${template.name}`,
-              sectId,
-              rarity: template.rarity,
-              effectName: `Trợ lực bản môn: ${template.effect}`,
-              statBoost: template.statBoost,
-              icon: '📚',
-              equipped: false,
-              level: 1,
-              maxLevel: 5,
-              levelRequirement: newLevel
-            };
-            manuals.push(newManual);
-            addNotification(`✨ TAM CẤP SƯ MÔN: DUYÊN TRUYỀN [${template.name}]!`, "#ff00ff");
-          }
-        }
-
-        // 2. Low-chance random generic Secret Martial arts drop
-        const manualRollChance = e.isBoss ? 0.08 : (e.isSubBoss ? 0.03 : 0.005);
-        if (Math.random() < manualRollChance) {
-          const genericTemplates = [
-            { name: '📚 Tây Vực Càn Khôn Đại Na Di Quyết', rarity: 'rare' as const, effectName: 'Cơ duyên: +6% Kháng phòng thủ toàn diện', statBoost: { resBonus: 0.06 } },
-            { name: '📚 Giang Hồ Độc Cô Cửu Kiếm Tàn Di bản', rarity: 'epic' as const, effectName: 'Cơ duyên: +5% Tỉ lệ Chí Mạng sát phạt', statBoost: { atkChance: 0.05 } },
-            { name: '📚 Cổ Bản Thần Hành Bách Biến Pháp Kỳ', rarity: 'rare' as const, effectName: 'Cơ duyên: Rút ngắn 6% CD xuất pháp trận', statBoost: { atkSpeed: 0.06 } },
-            { name: '📚 Cửu Dương Thần Kinh Sơ Giải Quyết', rarity: 'legendary' as const, effectName: 'Cơ duyên: +50 HP sinh khí & +25 MP nội nguyên', statBoost: { hpBonus: 50, mpBonus: 25 } },
-          ];
-          const template = genericTemplates[Math.floor(Math.random() * genericTemplates.length)];
-          const randomManualAward: MartialManual = {
-            id: `manual_drop_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-            name: template.name,
-            sectId: 'generic',
-            rarity: template.rarity,
-            effectName: template.effectName,
-            statBoost: template.statBoost,
-            icon: '📚',
-            equipped: false,
-            level: 1,
-            maxLevel: 5,
-            levelRequirement: 1
-          };
-          manuals.push(randomManualAward);
-          addNotification(`🎁 CƠ DUYÊN NGẪU NHIÊN: LĨNH HỘI [${template.name}]!`, "#00ffff");
-        }
-
-        // 3. Track in-battle active quest progress details
-        let quests = prev.quests ? prev.quests.map(q => {
-          if (q.status !== 'active') return q;
-          let currentCount = q.currentCount;
-          
-          if (q.type === 'escort' && !e.isBoss && !e.isSubBoss) {
-            currentCount = Math.min(q.targetCount, currentCount + 1);
-          } else if (q.type === 'jailbreak' && (e.isSubBoss || e.isBoss)) {
-            currentCount = Math.min(q.targetCount, currentCount + 1);
-          } else if (q.type === 'songjin' && e.isBoss) {
-            currentCount = Math.min(q.targetCount, currentCount + 1);
-          }
-          
-          const status: "available" | "active" | "completed" | "claimed" = currentCount >= q.targetCount ? 'completed' : q.status;
-          if (status === 'completed' && q.status === 'active') {
-            addNotification(`✨ NHIỆM VỤ [${q.title}] HOÀN THÀNH!`, "#ffff00");
-          }
-          
-          return { ...q, currentCount, status };
-        }) : [];
-
-        let companion = prev.companion;
-        if (companion) {
-          companion = { ...companion };
-          companion.exp += expGain * 0.5;
-          let maxCompExp = Math.floor(100 * Math.pow(1.2, companion.level - 1));
-          
-          while (companion.exp >= maxCompExp) {
-            companion.exp -= maxCompExp;
-            companion.level += 1;
-            maxCompExp = Math.floor(100 * Math.pow(1.2, companion.level - 1));
-            
-            const armorLvl = companion.equipment.armor?.upgradeLvl || 0;
-            const clawLvl = companion.equipment.weapon?.upgradeLvl || 0;
-            companion.maxHp = 150 + companion.level * 25 + armorLvl * 250;
-            companion.hp = companion.maxHp;
-            companion.atk = 15 + companion.level * 4 + clawLvl * 20;
-            if (companion.level % 50 === 0 || companion.level <= 5) {
-              addNotification(`✨ ĐỒNG HÀNH LÊN CẤP ${companion.level}!`, "#ffca28");
-            }
-          }
-        }
-
-        if (e.isBoss || Math.random() < 0.15) {
-          generateDrop(e.x, e.y, e.isBoss, prev.stage);
-        }
-
-        return {
-          ...prev,
-          gold: prev.gold + goldGain,
-          exp: newExp,
-          companion,
-          mobsKilled: prev.mobsKilled + 1,
-          quests,
-          manuals,
-          player: {
-            ...prev.player,
-            level: newLevel,
-            statPoints: newStatPts,
-            skillPoints: newSkillPts,
-          },
-        };
-      });
-
-      entitiesRef.current = entitiesRef.current.filter(
-        (ent) => ent.id !== e.id,
-      );
-    }
-  };
-
-  const generateDrop = (
-    x: number,
-    y: number,
-    isBoss: boolean,
-    stage: number,
-  ) => {
-    let roll = Math.random();
-    // Bosses give much better loot, but still keeps gold/red/pink rare
-    if (isBoss) roll *= 0.12; 
-
-    let rIdx = 0;
-    if (roll < 0.001) rIdx = 7;      // pink - Vô Thượng Thánh Thể (0.1% base)
-    else if (roll < 0.004) rIdx = 6; // crimson - Huyết Ảnh (0.3% base)
-    else if (roll < 0.014) rIdx = 5; // gold_rarity - Hoàng Kim (1.0% base)
-    else if (roll < 0.045) rIdx = 4; // emerald (3.1% base)
-    else if (roll < 0.115) rIdx = 3; // legendary (7.0% base)
-    else if (roll < 0.30) rIdx = 2;  // epic (18.5% base)
-    else if (roll < 0.65) rIdx = 1;  // rare (35% base)
-    else rIdx = 0;                  // common (35% base)
-
-    const types: EquipmentType[] = [
-      "weapon",
-      "armor",
-      "accessory",
-      "special",
-      "horse",
-      "cloak",
-      "seal",
-      "banner",
-    ];
-    const type = types[Math.floor(Math.random() * types.length)];
-    const rarity = RARITIES[rIdx];
-
-    // Unlocks larger range of tiers early-game, cap at 9 (Cửu Đẳng)
-    const maxPossibleTier = Math.min(9, Math.max(3, stage + 1));
-    
-    // Balanced, exciting, progression-tuned tier distribution!
-    const randRoll = Math.random();
-    let tier = 1;
-    if (randRoll < 0.35) {
-      // 35% chance to roll current max tier
-      tier = maxPossibleTier;
-    } else if (randRoll < 0.60) {
-      // 25% chance to roll max - 1
-      tier = Math.max(1, maxPossibleTier - 1);
-    } else if (randRoll < 0.80) {
-      // 20% chance to roll max - 2
-      tier = Math.max(1, maxPossibleTier - 2);
-    } else {
-      // 20% chance to roll a fully random tier up to max
-      tier = Math.max(1, Math.floor(1 + Math.random() * maxPossibleTier));
-    }
-
-    // Apply high tier multiplier (+35% more base power per higher tier representing deep VLTK upgrade levels!)
-    const tierBonus = 1 + (tier - 1) * 0.35;
-    const power = stage * RARITY_MULTIPLIERS[rarity] * tierBonus;
-    const name = EQUIPMENT_NAME_MAP[type][rarity] || "Vô Danh Bảo Vật";
-
-    dropsRef.current.push({
-      id: Math.random(),
-      x,
-      y,
-      type,
-      rarity,
-      power,
-      name,
-      tier,
-    });
-  };
-
-  const equipItem = (
-    item: Drop,
-    p: GameState["player"],
-    buffs: GameState["buffs"],
-    stage: number,
-    manuals?: MartialManual[],
-  ): number => {
-    const current = p.equipment[item.type];
-    if (!current || item.power > current.power) {
-      p.equipment[item.type] = {
-        type: item.type,
-        rarity: item.rarity,
-        power: item.power,
-        name: item.name,
-        tier: item.tier,
-      };
-
-      // Extract Secret Bible (Bí Kíp) active passive buffs
-      let bAtkChance = 0;
-      let bAtkSpeed = 0;
-      let bGoldMult = 1.0;
-      let bResBonus = 1.0;
-      let bHpBonus = 0;
-      let bMpBonus = 0;
-
-      if (manuals) {
-        manuals.forEach(m => {
-          if (m.equipped) {
-            if (m.statBoost.atkChance) bAtkChance += m.statBoost.atkChance;
-            if (m.statBoost.atkSpeed) bAtkSpeed += m.statBoost.atkSpeed;
-            if (m.statBoost.goldMult) bGoldMult += m.statBoost.goldMult;
-            if (m.statBoost.resBonus) bResBonus += m.statBoost.resBonus;
-            if (m.statBoost.hpBonus) bHpBonus += m.statBoost.hpBonus;
-            if (m.statBoost.mpBonus) bMpBonus += m.statBoost.mpBonus;
-          }
-        });
-      }
-
-      // Recalc stats buffs
-      const eq = p.equipment;
-      
-      // Balanced Weapon (VJ) -> DMG: x0.02 instead of x0.1 (prevents hacker damage scaling)
-      buffs.dmgMult = 1 + (eq.weapon ? eq.weapon.power * 0.02 : 0);
-      
-      // Balanced Armor (GIÁP) -> HP: x0.012 instead of x0.05
-      buffs.hpMult = 1 + (eq.armor ? eq.armor.power * 0.012 : 0);
-      
-      // Cloak (🧥) -> Crit DMG Multiplier
-      const critDmgBonus = eq.cloak ? eq.cloak.power * 0.008 : 0;
-      buffs.critDmgMult = 1.5 + critDmgBonus;
-      
-      // Seal (🔏) -> Skill range bonus
-      const rangeBonus = eq.seal ? eq.seal.power * 0.8 : 0;
-      buffs.skillRangeBonus = rangeBonus;
-      buffs.critChanceBonus = bAtkChance;
-
-      // Banner (🚩) -> Lifesteal
-      const lifeStealBonus = eq.banner ? eq.banner.power * 0.005 : 0;
-      buffs.lifeSteal = lifeStealBonus;
-
-      // Accessory (💍) & Horse (🐴) -> CD reduction (capped at 75% limit to retain skill tactical pacing)
-      const cdBonus = (eq.accessory ? eq.accessory.power * 0.005 : 0) + (eq.horse ? eq.horse.power * 0.003 : 0) + bAtkSpeed;
-      buffs.cdReduc = Math.min(0.75, cdBonus);
-      
-      // Special (🔮) -> Resistance (resMult)
-      buffs.resMult = (1 + (eq.special ? eq.special.power * 0.025 : 0)) * bResBonus;
-      
-      // Movement speed -> Horse (🐴) adds direct speed
-      const speedBonus = eq.horse ? eq.horse.power * 4 : 0;
-      p.speed = 160 + p.currentStats.agi * 5 + speedBonus;
-
-      // Integrate Bí Kíp flat bonuses into player totals
-      const newMaxHp = Math.floor(
-        (300 + p.currentStats.con * 20) * buffs.hpMult,
-      ) + bHpBonus;
-      p.maxHp = newMaxHp;
-      
-      const newMaxMp = Math.floor(
-        (100 + p.currentStats.nei * 15) * 1.0,
-      ) + bMpBonus;
-      p.maxMp = newMaxMp;
-      p.atk = Math.floor((25 + p.currentStats.str * 3) * buffs.dmgMult);
-
-      addNotification(`Nhặt được [${item.name}]`, RARITY_COLORS[item.rarity]);
-      return 0;
-    } else {
-      // Recycles to gold based on rarity and stage
-      const baseRecycles = {
-        common: 10,
-        rare: 30,
-        epic: 80,
-        legendary: 200,
-        emerald: 500,
-        gold_rarity: 1200,
-        crimson: 3000,
-        pink: 8000,
-      };
-      const recycleVal = Math.floor((baseRecycles[item.rarity] || 10) * (1 + stage * 0.12));
-      addNotification(`Thu hồi [${item.name}] phế phẩm, nhận +${recycleVal} Vàng`, "#f1c40f");
-      return recycleVal;
-    }
-  };
 
   const fpsRef = useRef({ lastCountTime: 0, frames: 0, currentFps: 0, lastFrameMs: 0 });
 
@@ -1932,103 +356,20 @@ export default function GameCanvas({
     ctx.fillText(`Prt: ${metrics.particleCount}`, x + padding, y + padding + lineH * 4);
   };
 
-  const TIPS = [
-    "💡 TIP: Nâng cấp Sinh Khí (CON) để sống sót lâu hơn trong những trận chiến kéo dài.",
-    "💡 TIP: Khinh công (Thân Pháp) giúp tăng tỉ lệ chí mạng và tốc độ tiếp cận kẻ thù.",
-    "💡 TIP: Bạn có thể sở hữu tối đa 2 Bí Kíp cùng lúc. Hãy kết hợp thông minh!",
-    "💡 TIP: Nếu quá khó, hãy tập trung farm quái ở các ải đầu để tích lũy Vàng.",
-    "💡 TIP: Linh thú (Đồng Hành) có thể tự động nhặt đồ và tấn công giúp bạn.",
-    "💡 TIP: Ấn Tín (Seal) giúp tăng tầm đánh của các chưởng pháp rất hiệu quả."
-  ];
-
-  const drawLoadingScreen = (
-    ctx: CanvasRenderingContext2D,
-    canvasWidth: number,
-    canvasHeight: number,
-    loaded: number,
-    total: number,
-    color: string,
-    time: number
-  ) => {
-    ctx.fillStyle = '#050508'; // dark-bg
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    const cx = canvasWidth / 2;
-    const cy = canvasHeight / 2;
-    const progress = Math.min(1, loaded / total);
-
-    // Dynamic large background icon based on time
-    const EMOJIS = ['🪨', '🪵', '💧', '⚡', '🦂', '🎯', '❄️', '⚔️', '🔥'];
-    const emojiIdx = Math.floor(time * 0.001) % EMOJIS.length;
-    
-    ctx.save();
-    ctx.globalAlpha = 0.15;
-    ctx.font = '200px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.translate(cx, cy - 40);
-    ctx.rotate(Math.sin(time * 0.001) * 0.1);
-    ctx.fillText(EMOJIS[emojiIdx], 0, 0);
-    ctx.restore();
-
-    // Large Golden Percentage
-    ctx.fillStyle = '#FFD700';
-    ctx.font = 'bold 54px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    // Add glowing effect to text
-    ctx.shadowColor = '#FFD700';
-    ctx.shadowBlur = 20;
-    ctx.fillText(`${Math.floor(progress * 100)}%`, cx, cy - 20);
-    ctx.shadowBlur = 0;
-
-    // Horizontal Progress Bar
-    const barW = Math.min(400, canvasWidth * 0.8);
-    const barH = 14;
-    const barX = cx - barW / 2;
-    const barY = cy + 40;
-
-    // Background bar
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW, barH, barH / 2);
-    ctx.fill();
-
-    // Fill bar
-    ctx.fillStyle = '#FFD700';
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barW * progress, barH, barH / 2);
-    ctx.fill();
-    
-    // Add small highlight line to fill bar
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.beginPath();
-    ctx.roundRect(barX + 2, barY + 2, barW * progress - 4, barH / 2 - 2, (barH / 2 - 2) / 2);
-    ctx.fill();
-
-    // Tip Texts (changes every 4 seconds)
-    const tipIdx = Math.floor(time * 0.00025) % TIPS.length;
-    ctx.font = 'italic 14px serif';
-    ctx.fillStyle = '#aaaaaa';
-    ctx.fillText(TIPS[tipIdx], cx, cy + 90);
-  };
-
-
   const loop = (time: number) => {
     if (loadedResourcesRef.current < TOTAL_RESOURCES) {
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          drawLoadingScreen(
-            ctx, 
-            canvas.width, 
-            canvas.height, 
-            loadedResourcesRef.current, 
-            TOTAL_RESOURCES, 
-            stateRef.current.player.color || '#facc15', 
-            time
-          );
+          drawLoadingScreen(ctx, {
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            loaded: loadedResourcesRef.current,
+            total: TOTAL_RESOURCES,
+            color: stateRef.current.player.color || '#facc15',
+            time,
+          });
         }
       }
       requestRef.current = requestAnimationFrame(loop);
@@ -2040,65 +381,12 @@ export default function GameCanvas({
     lastTimeRef.current = time;
 
     update(dt);
-    cc.director.update(dt);
 
     // Companion Autonomous Battle Strike (Tốc đánh, kĩ năng theo đẳng cấp & trang bị!)
-    const comp = stateRef.current.companion;
-    if (comp && stateRef.current.state === "PLAYING") {
-      companionAtkTimerRef.current -= dt;
-      if (companionAtkTimerRef.current <= 0) {
-        companionAtkTimerRef.current = Math.max(1.0, 4.5 - comp.level * 0.15);
-
-        const p = stateRef.current.player;
-        let minDist = 350;
-        let nearest: any = null;
-        entitiesRef.current.forEach((e) => {
-          const d = Math.hypot(p.x - e.x, p.y - e.y);
-          if (d < minDist && e.hp > 0) {
-            minDist = d;
-            nearest = e;
-          }
-        });
-
-        if (nearest) {
-          const clawLvl = comp.equipment.weapon?.upgradeLvl || 0;
-          const compDamage = Math.floor((15 + comp.level * 4 + clawLvl * 5) * (1 + comp.level * 0.05));
-          
-          nearest.hp -= compDamage;
-          
-          // Spawn beautiful trail effect from companion to nearest target
-          const stepCount = 8;
-          for (let i = 0; i <= stepCount; i++) {
-            const ratio = i / stepCount;
-            const px = p.x + (nearest.x - p.x) * ratio;
-            const py = p.y + (nearest.y - p.y) * ratio;
-            particlesRef.current.push({
-              x: px,
-              y: py,
-              vx: (Math.random() - 0.5) * 30,
-              vy: (Math.random() - 0.5) * 30,
-              life: 0.35,
-              color: "#f1c40f",
-              size: 2.2
-            });
-          }
-
-          // Combine companion damage if there's too much text
-          if (textsRef.current.length < 35) {
-            textsRef.current.push({
-              id: Math.random(),
-              x: nearest.x,
-              y: nearest.y - 40,
-              text: `☯️ [${comp.name}] HỒ TRỢ KÍCH SÁT -${compDamage}`,
-              color: "#ffca28",
-              life: 1.4
-            });
-          } else {
-             companionTotalDmgRef.current += compDamage;
-          }
-        }
-      }
-    }
+    tickCompanion(stateRef.current, dt, entitiesRef.current, particlesRef.current, textsRef.current, {
+      atkTimer: companionAtkTimerRef,
+      totalDmg: companionTotalDmgRef
+    });
 
     // Push accumulated frame damage if any
     if (frameTotalDmgRef.current > 0) {
@@ -2113,7 +401,7 @@ export default function GameCanvas({
       frameTotalDmgRef.current = 0;
     }
     
-    if (companionTotalDmgRef.current > 0 && comp) {
+    if (companionTotalDmgRef.current > 0 && stateRef.current.companion) {
       textsRef.current.push({
         id: Math.random(),
         x: stateRef.current.player.x,
@@ -2162,939 +450,99 @@ export default function GameCanvas({
     ctx.save();
     ctx.scale(zoom, zoom);
 
-    // Draw realistic repeatable grass texture as a master underlay
-    ctx.save();
-    ctx.translate(-cx, -cy);
-    
-    // Fill the battlefield MAP_SIZE with a healthy base solid color (so it's not totally black even without the image!)
-    let biomeMapFill = "#22472b"; // default forest - rich warm green
-    if (cycle === 1) biomeMapFill = "#6e5235"; // Desert - golden warm sands 
-    else if (cycle === 2) biomeMapFill = "#32455c"; // Mountain/Ice - solid ice-blue mountain terrain
-    else if (cycle === 3) biomeMapFill = "#344e3a"; // Plains - prairie green
-    
-    // OPTIMIZATION: Only draw within the visible viewport bounds with a safety margin (cuts rendering surface by 95%!)
-    const margin = 200;
-    const clipX = Math.max(0, cx - margin);
-    const clipY = Math.max(0, cy - margin);
-    const clipW = Math.min(MAP_SIZE - clipX, viewWidth + margin * 2);
-    const clipH = Math.min(MAP_SIZE - clipY, viewHeight + margin * 2);
-
-    ctx.fillStyle = biomeMapFill;
-    ctx.fillRect(clipX, clipY, clipW, clipH);
-
-    const isStone = (cycle === 1 || cycle === 2);
-    let pattern: CanvasPattern | null = null;
-    if (isStone) {
-      if (stonePatternRef.current) {
-        pattern = stonePatternRef.current;
-      } else if (stoneImgRef.current) {
-        try {
-          const pat = ctx.createPattern(stoneImgRef.current, "repeat");
-          if (pat) {
-            try {
-              const matrix = new DOMMatrix();
-              matrix.scaleSelf(0.22, 0.22);
-              pat.setTransform(matrix);
-            } catch (e) {}
-            stonePatternRef.current = pat;
-            pattern = pat;
-          }
-        } catch (err) {}
-      }
-    } else {
-      if (grassPatternRef.current) {
-        pattern = grassPatternRef.current;
-      } else if (grassImgRef.current) {
-        try {
-          const pat = ctx.createPattern(grassImgRef.current, "repeat");
-          if (pat) {
-            try {
-              const matrix = new DOMMatrix();
-              matrix.scaleSelf(0.22, 0.22);
-              pat.setTransform(matrix);
-            } catch (e) {}
-            grassPatternRef.current = pat;
-            pattern = pat;
-          }
-        } catch (err) {}
-      }
-    }
-
-    if (pattern) {
-      try {
-        ctx.fillStyle = pattern;
-        ctx.fillRect(clipX, clipY, clipW, clipH);
-
-        // Apply beautiful watercolor aesthetic composite tint based on biome cycle (using soft overlays)
-        if (cycle === 0) {
-          // Forest - Lush Deep Jade Green
-          ctx.fillStyle = "rgba(10, 40, 15, 0.25)";
-        } else if (cycle === 1) {
-          // Desert - Golden Dun
-          ctx.fillStyle = "rgba(200, 120, 20, 0.22)";
-        } else if (cycle === 2) {
-          // Mountain - Ice Frost Blue
-          ctx.fillStyle = "rgba(140, 180, 220, 0.22)";
-        } else {
-          // Plains - Soft Olive Ink
-          ctx.fillStyle = "rgba(40, 60, 40, 0.18)";
-        }
-        ctx.fillRect(clipX, clipY, clipW, clipH);
-      } catch (err) {}
-    }
-    ctx.restore();
-
-    // World coordinate grid / Grass details
-    ctx.save();
-    let gridColor = "rgba(32, 58, 37, 0.4)";
-    if (cycle === 1) gridColor = "rgba(110, 80, 40, 0.35)";
-    else if (cycle === 2) gridColor = "rgba(80, 110, 150, 0.35)";
-    else if (cycle === 3) gridColor = "rgba(40, 70, 50, 0.35)";
-    
-    ctx.strokeStyle = gridColor;
-    ctx.lineWidth = 1.5;
-    const tileSize = 80;
-
-    // Determine bounds in world space to draw only what's visible
-    const startX = Math.floor(cx / tileSize) * tileSize - tileSize;
-    const startY = Math.floor(cy / tileSize) * tileSize - tileSize;
-    const endX = cx + viewWidth + tileSize;
-    const endY = cy + viewHeight + tileSize;
-
-    ctx.translate(-cx, -cy);
-
-    // Pattern instead of solid grid
-    ctx.beginPath();
-    for (let x = startX; x <= endX; x += tileSize) {
-      ctx.moveTo(x, cy - tileSize);
-      ctx.lineTo(x, cy + viewHeight + tileSize);
-    }
-    for (let y = startY; y <= endY; y += tileSize) {
-      ctx.moveTo(cx - tileSize, y);
-      ctx.lineTo(cx + viewWidth + tileSize, y);
-    }
-    ctx.globalAlpha = 0.3; // Make grid subtle
-    ctx.stroke();
-    
-    // Draw grass blades and textures inside tiles (sparsely for massive performance boost)
-    ctx.globalAlpha = 0.8;
-    let detailColor = "#203a25"; // Forest
-    if (cycle === 1) detailColor = "#523f2b"; // Desert
-    else if (cycle === 2) detailColor = "#2b3b4f"; // Mountain
-    else if (cycle === 3) detailColor = "#293e2f"; // Plains
-    
-    ctx.strokeStyle = detailColor;
-    ctx.lineWidth = 1;
-    for (let x = startX; x < endX; x += tileSize * 3) {
-      for (let y = startY; y < endY; y += tileSize * 3) {
-        // Randomly place some grass marks
-        const gx = x + (Math.abs(x * 13) % tileSize);
-        const gy = y + (Math.abs(y * 17) % tileSize);
-        ctx.beginPath();
-        ctx.moveTo(gx, gy);
-        ctx.lineTo(gx + 4, gy - 8);
-        ctx.moveTo(gx + 2, gy);
-        ctx.lineTo(gx + 8, gy - 6);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
+    drawBackground(ctx, {
+      cx,
+      cy,
+      viewWidth,
+      viewHeight,
+      cycle,
+      grassImg: grassImgRef.current,
+      stoneImg: stoneImgRef.current,
+    });
 
     // Scenery (Battlefield)
-    sceneryRef.current.forEach((s) => {
-      const sx = s.x - cx;
-      const sy = s.y - cy;
-      if (
-        sx < -100 ||
-        sy < -100 ||
-        sx > viewWidth + 100 ||
-        sy > viewHeight + 100
-      )
-        return;
-
-      if (s.t === 0) {
-        // Stone Lantern
-        if (lanternImgRef.current) {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.32)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy + s.sz * 0.1, s.sz * 0.45, s.sz * 0.2, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.imageSmoothingEnabled = true;
-          const imgW = s.sz * 1.45;
-          const imgH = s.sz * 2.15;
-          ctx.drawImage(
-            lanternImgRef.current,
-            sx - imgW / 2,
-            sy - imgH * 0.85,
-            imgW,
-            imgH
-          );
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "rgba(0,0,0,0.4)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, s.sz * 0.4, s.sz * 0.2, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = "#7f8c8d";
-          ctx.fillRect(sx - s.sz * 0.1, sy - s.sz * 0.6, s.sz * 0.2, s.sz * 0.6);
-          ctx.fillStyle = "#95a5a6";
-          ctx.fillRect(sx - s.sz * 0.3, sy - s.sz * 0.8, s.sz * 0.6, s.sz * 0.2);
-          ctx.fillStyle = "#ffb300";
-          ctx.fillRect(sx - s.sz * 0.2, sy - s.sz * 1.1, s.sz * 0.4, s.sz * 0.3);
-          ctx.fillStyle = "#34495e";
-          ctx.beginPath();
-          ctx.moveTo(sx, sy - s.sz * 1.4);
-          ctx.lineTo(sx - s.sz * 0.4, sy - s.sz * 1.1);
-          ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.1);
-          ctx.fill();
-        }
-      } else if (s.t === 1) {
-        // Wooden Barricade
-        if (barricadeImgRef.current) {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.4)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy + s.sz * 0.15, s.sz * 1.25, s.sz * 0.45, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.imageSmoothingEnabled = true;
-          const imgW = s.sz * 2.3;
-          const imgH = s.sz * 1.7;
-          ctx.drawImage(
-            barricadeImgRef.current,
-            sx - imgW / 2,
-            sy - imgH * 0.72,
-            imgW,
-            imgH
-          );
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "rgba(0,0,0,0.5)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, s.sz, s.sz * 0.4, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = "#5c4033";
-          ctx.lineWidth = 6;
-          ctx.beginPath();
-          ctx.moveTo(sx - s.sz * 0.8, sy - s.sz * 0.4);
-          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 0.4);
-          ctx.stroke();
-
-          ctx.strokeStyle = "#7f8c8d";
-          ctx.lineWidth = 3;
-          for (let sp = -s.sz * 0.6; sp <= s.sz * 0.6; sp += 15) {
-             ctx.beginPath();
-             ctx.moveTo(sx + sp, sy - s.sz * 0.4);
-             ctx.lineTo(sx + sp + 5, sy - s.sz * 1.2);
-             ctx.stroke();
-          }
-        }
-      } else if (s.t === 2) {
-        // Green leafy tree
-        if (treeImgRef.current) {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.3)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy + s.sz * 0.1, s.sz * 1.0, s.sz * 0.35, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.imageSmoothingEnabled = true;
-          const imgW = s.sz * 2.5;
-          const imgH = s.sz * 2.8;
-          ctx.drawImage(
-            treeImgRef.current,
-            sx - imgW / 2,
-            sy - imgH * 0.85,
-            imgW,
-            imgH
-          );
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "rgba(0,0,0,0.3)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, s.sz * 0.8, s.sz * 0.4, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = "#5d4037";
-          ctx.beginPath();
-          ctx.moveTo(sx - s.sz * 0.1, sy);
-          ctx.lineTo(sx - s.sz * 0.2, sy - s.sz * 1.5);
-          ctx.lineTo(sx + s.sz * 0.2, sy - s.sz * 1.5);
-          ctx.lineTo(sx + s.sz * 0.1, sy);
-          ctx.fill();
-
-          ctx.fillStyle = "#2e7d32";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy - s.sz * 1.8, s.sz * 1.5, s.sz * 1.2, 0, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.fillStyle = "#43a047";
-          ctx.beginPath();
-          ctx.ellipse(
-            sx - s.sz * 0.3,
-            sy - s.sz * 2.2,
-            s.sz * 1.1,
-            s.sz * 0.8,
-            Math.PI / 4,
-            0,
-            Math.PI * 2,
-          );
-          ctx.fill();
-        }
-      } else if (s.t === 3) {
-        // Battle Flag / Banner
-        if (flagImgRef.current) {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.25)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy + s.sz * 0.1, s.sz * 0.5, s.sz * 0.16, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.imageSmoothingEnabled = true;
-          const imgW = s.sz * 1.8;
-          const imgH = s.sz * 2.9;
-          ctx.drawImage(
-            flagImgRef.current,
-            sx - imgW / 2,
-            sy - imgH * 0.88,
-            imgW,
-            imgH
-          );
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "rgba(0,0,0,0.3)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, s.sz * 0.3, s.sz * 0.1, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = "#d35400";
-          ctx.fillRect(sx - 2, sy - s.sz * 2.5, 4, s.sz * 2.5);
-
-          ctx.fillStyle = "#c0392b";
-          ctx.beginPath();
-          ctx.moveTo(sx, sy - s.sz * 2.4);
-          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 2.4);
-          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz);
-          ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.2);
-          ctx.lineTo(sx, sy - s.sz);
-          ctx.fill();
-
-          ctx.strokeStyle = "#f1c40f";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(sx + s.sz * 0.2, sy - s.sz * 2.0);
-          ctx.lineTo(sx + s.sz * 0.6, sy - s.sz * 2.0);
-          ctx.moveTo(sx + s.sz * 0.4, sy - s.sz * 2.2);
-          ctx.lineTo(sx + s.sz * 0.4, sy - s.sz * 1.5);
-          ctx.moveTo(sx + s.sz * 0.2, sy - s.sz * 1.7);
-          ctx.lineTo(sx + s.sz * 0.6, sy - s.sz * 1.7);
-          ctx.stroke();
-        }
-      } else if (s.t === 4) {
-        // Catapult (Máy bắn đá kiểu Tống Kim)
-        if (catapultImgRef.current) {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.35)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy + s.sz * 0.15, s.sz * 1.25, s.sz * 0.45, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.imageSmoothingEnabled = true;
-          const imgW = s.sz * 2.2;
-          const imgH = s.sz * 2.0;
-          ctx.drawImage(
-            catapultImgRef.current,
-            sx - imgW / 2,
-            sy - imgH * 0.76,
-            imgW,
-            imgH
-          );
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "rgba(0,0,0,0.3)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, s.sz * 1.1, s.sz * 0.5, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = "#8d6e63";
-          ctx.fillRect(sx - s.sz * 0.8, sy - s.sz * 0.2, s.sz * 1.6, s.sz * 0.3);
-          ctx.fillRect(sx - s.sz * 0.1, sy - s.sz * 1.0, s.sz * 0.2, s.sz * 0.9);
-
-          ctx.fillStyle = "#3e2723";
-          ctx.beginPath();
-          ctx.arc(sx - s.sz * 0.6, sy + s.sz * 0.1, s.sz * 0.25, 0, Math.PI * 2);
-          ctx.arc(sx + s.sz * 0.6, sy + s.sz * 0.1, s.sz * 0.25, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.strokeStyle = "#d7ccc8";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-
-          ctx.strokeStyle = "#5d4037";
-          ctx.lineWidth = 4;
-          ctx.beginPath();
-          ctx.moveTo(sx + s.sz * 0.3, sy - s.sz * 0.1);
-          ctx.lineTo(sx - s.sz * 0.9, sy - s.sz * 1.2);
-          ctx.stroke();
-
-          ctx.fillStyle = "#9e9e9e";
-          ctx.beginPath();
-          ctx.arc(sx - s.sz * 0.9, sy - s.sz * 1.2, s.sz * 0.22, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } else if (s.t === 5) {
-        // Bamboo/wooden fence
-        if (fenceImgRef.current) {
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.28)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy + s.sz * 0.12, s.sz * 1.15, s.sz * 0.42, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.imageSmoothingEnabled = true;
-          const imgW = s.sz * 2.2;
-          const imgH = s.sz * 1.6;
-          ctx.drawImage(
-            fenceImgRef.current,
-            sx - imgW / 2,
-            sy - imgH * 0.72,
-            imgW,
-            imgH
-          );
-          ctx.restore();
-        } else {
-          ctx.fillStyle = "rgba(0,0,0,0.25)";
-          ctx.beginPath();
-          ctx.ellipse(sx, sy, s.sz * 1.0, s.sz * 0.3, 0, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = "#a1887f";
-          ctx.lineWidth = 5;
-          ctx.beginPath();
-          ctx.moveTo(sx - s.sz * 0.7, sy + s.sz * 0.1);
-          ctx.lineTo(sx + s.sz * 0.5, sy - s.sz * 1.1);
-          ctx.moveTo(sx + s.sz * 0.7, sy + s.sz * 0.1);
-          ctx.lineTo(sx - s.sz * 0.5, sy - s.sz * 1.1);
-          ctx.moveTo(sx - s.sz * 0.8, sy - s.sz * 0.45);
-          ctx.lineTo(sx + s.sz * 0.8, sy - s.sz * 0.45);
-          ctx.stroke();
-        }
-      }
+    drawScenery(ctx, {
+      scenery: sceneryRef.current,
+      cx,
+      cy,
+      viewWidth,
+      viewHeight,
+      lanternImg: lanternImgRef.current,
+      barricadeImg: barricadeImgRef.current,
+      treeImg: treeImgRef.current,
+      flagImg: flagImgRef.current,
+      catapultImg: catapultImgRef.current,
+      fenceImg: fenceImgRef.current,
     });
 
     // Particles
-    ctx.save();
-    particlesRef.current.forEach((par) => {
-      const px = par.x - cx;
-      const py = par.y - cy;
-      
-      // OPTIMIZATION: Skip rendering for offscreen particles (massive performance boost!)
-      if (
-        px < -150 ||
-        py < -150 ||
-        px > viewWidth + 150 ||
-        py > viewHeight + 150
-      )
-        return;
-
-      const progress = par.maxLife ? 1 - (par.life / par.maxLife) : 0;
-      const alpha = Math.max(0, par.life * 2); // fade out at end
-      
-      ctx.globalAlpha = Math.min(1, alpha);
-      
-      if (par.type === 'ring' || par.isBlast) {
-        // Ground magic circle or expanding ring
-        ctx.strokeStyle = par.color;
-        ctx.lineWidth = 2 + progress * 5;
-        ctx.beginPath();
-        ctx.ellipse(px, py, par.size, par.size * 0.5, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        ctx.fillStyle = par.color;
-        ctx.globalAlpha = Math.min(0.3, alpha * 0.5);
-        ctx.fill();
-        ctx.globalAlpha = Math.min(1, alpha);
-      } else if (par.type === 'shockwave') {
-        // Very fast thin ring
-        ctx.strokeStyle = par.color;
-        ctx.lineWidth = Math.max(1, 10 - progress * 10);
-        ctx.beginPath();
-        ctx.arc(px, py, par.size, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (par.type === 'pillar') {
-        // Light pillar coming down or shooting up
-        const height = par.size * 5;
-        const width = par.size;
-        
-          } else if (par.type === 'sword') {
-        // Raining swords (optimized fast vector glow)
-        ctx.translate(px, py);
-        if (par.rotation) ctx.rotate(par.rotation);
-        
-        ctx.fillStyle = par.color;
-        // Blade
-        ctx.beginPath();
-        ctx.moveTo(0, par.size * 2);
-        ctx.lineTo(-par.size / 4, par.size);
-        ctx.lineTo(-par.size / 4, -par.size * 2);
-        ctx.lineTo(par.size / 4, -par.size * 2);
-        ctx.lineTo(par.size / 4, par.size);
-        ctx.fill();
-        
-        // Fast dual-blend neon glow replacing shadowBlur
-        ctx.fillStyle = par.color;
-        ctx.globalAlpha = 0.25 * alpha;
-        ctx.fillRect(-par.size / 3, -par.size * 1.9, par.size * 0.66, par.size * 3.8);
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(-par.size / 6, -par.size * 1.8, par.size / 3, par.size * 3.5);
-        
-        if (par.rotation) ctx.rotate(-par.rotation);
-        ctx.translate(-px, -py);
-      } else if (par.type === 'trail') {
-        // Double-circle aura simulation (100x faster than shadowBlur)
-        ctx.fillStyle = par.color;
-        ctx.globalAlpha = 0.3 * alpha;
-        ctx.beginPath();
-        ctx.arc(px, py, par.size * 2.2, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(px, py, par.size, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (par.type === 'beam') {
-        // Clean double-layered glowing beam
-        ctx.strokeStyle = par.color;
-        ctx.lineWidth = Math.max(3, par.size * (par.life / 0.8) * 3.5);
-        ctx.globalAlpha = 0.25 * alpha;
-        ctx.beginPath();
-        ctx.moveTo(px - 1000, py);
-        ctx.lineTo(px + 1000, py);
-        ctx.stroke();
-
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(1, par.size * (par.life / 0.8) * 1.1);
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.moveTo(px - 1000, py);
-        ctx.lineTo(px + 1000, py);
-        ctx.stroke();
-      } else if (par.type === 'lightning') {
-        // Collect coordinates once for double-pass consistent coordinates without random shifts
-        const pts: { x: number; y: number }[] = [{ x: px, y: py - 500 }];
-        let cyy = py - 500;
-        let cxx = px;
-        while (cyy < py) {
-          cyy += 30 + Math.random() * 40;
-          cxx += (Math.random() - 0.5) * 50;
-          pts.push({ x: cxx, y: cyy });
-        }
-
-        // Draw outer thick color aura
-        ctx.strokeStyle = par.color;
-        ctx.lineWidth = 5 + Math.random() * 3;
-        ctx.globalAlpha = 0.35 * alpha;
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) {
-          ctx.lineTo(pts[i].x, pts[i].y);
-        }
-        ctx.stroke();
-
-        // Draw inner intense hot-white center core
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5 + Math.random() * 1.5;
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) {
-          ctx.lineTo(pts[i].x, pts[i].y);
-        }
-        ctx.stroke();
-      } else {
-        // Default dot
-        ctx.fillStyle = par.color;
-        ctx.fillRect(px, py, Math.max(1, par.size), Math.max(1, par.size));
-      }
+    drawParticles(ctx, {
+      particles: particlesRef.current,
+      cx,
+      cy,
+      viewWidth,
+      viewHeight,
     });
-    ctx.restore();
 
     // Drops with Majestic Luminous Light Auras (Hào Quang Ánh Sáng) and floating item badges
-    dropsRef.current.forEach((d) => {
-      const dx = d.x - cx;
-      const dy = d.y - cy;
-      
-      // OPTIMIZATION: Skip rendering for offscreen drops (huge performance boost!)
-      if (
-        dx < -100 ||
-        dy < -100 ||
-        dx > viewWidth + 100 ||
-        dy > viewHeight + 100
-      )
-        return;
-
-      const rColor = RARITY_COLORS[d.rarity] || "#ffffff";
-      
-      // Highlight high-tier treasures with grander visual auras
-      const isSuperRare = d.rarity === 'pink' || d.rarity === 'crimson' || d.rarity === 'gold_rarity';
-      const baseRadius = isSuperRare ? 38 : 26;
-      
-      // Gentle breathing scale factor
-      const pulse = 1 + Math.sin(time * 0.003) * 0.08;
-      const auraRadius = baseRadius * pulse;
-      
-      // 1. Majestic Luminous Light Aura (Hào quang linh diệu) using high-performance Radial Gradients
-      ctx.save();
-      const grad = ctx.createRadialGradient(dx, dy, d.rarity === 'pink' || d.rarity === 'crimson' ? 4 : 2, dx, dy, auraRadius);
-      grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-      grad.addColorStop(0.2, `${rColor}cc`);
-      grad.addColorStop(0.6, `${rColor}33`);
-      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
-      
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(dx, dy, auraRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      
-      // 2. Slow, majestic rotating light rays / divine flares (similar to VLTK divine weapon glows)
-      // Matches serene skill effect timings, entirely separate from battle skill ring circles
-      ctx.save();
-      const slowAngle = (time * 0.0005) % (Math.PI * 2); // Majestic steady speed (approx 12s per full circle)
-      ctx.translate(dx, dy);
-      ctx.rotate(slowAngle);
-      
-      // Draw 4-point/8-point holy light star rays for premium items
-      ctx.fillStyle = rColor;
-      ctx.globalAlpha = 0.35 + Math.sin(time * 0.004) * 0.1; // Smooth breathing transparency
-      
-      // Primary horizontal/vertical slender diamonds representing beautiful light flares
-      const rayLength = auraRadius * 1.35;
-      const rayWidth = isSuperRare ? 4 : 2.5;
-      
-      ctx.beginPath();
-      // Upward Ray
-      ctx.moveTo(0, -rayLength);
-      ctx.lineTo(rayWidth, 0);
-      ctx.lineTo(-rayWidth, 0);
-      // Downward Ray
-      ctx.moveTo(0, rayLength);
-      ctx.lineTo(rayWidth, 0);
-      ctx.lineTo(-rayWidth, 0);
-      // Rightward Ray
-      ctx.moveTo(rayLength, 0);
-      ctx.lineTo(0, rayWidth);
-      ctx.lineTo(0, -rayWidth);
-      // Leftward Ray
-      ctx.moveTo(-rayLength, 0);
-      ctx.lineTo(0, rayWidth);
-      ctx.lineTo(0, -rayWidth);
-      ctx.fill();
-      
-      // Secondary diagonal cross for super rare treasures (Gold, Red, Pink)
-      if (isSuperRare) {
-        ctx.rotate(Math.PI / 4);
-        const subLength = rayLength * 0.7;
-        ctx.beginPath();
-        ctx.moveTo(0, -subLength);
-        ctx.lineTo(rayWidth * 0.7, 0);
-        ctx.lineTo(-rayWidth * 0.7, 0);
-        ctx.moveTo(0, subLength);
-        ctx.lineTo(rayWidth * 0.7, 0);
-        ctx.lineTo(-rayWidth * 0.7, 0);
-        ctx.moveTo(subLength, 0);
-        ctx.lineTo(0, rayWidth * 0.7);
-        ctx.lineTo(0, -rayWidth * 0.7);
-        ctx.moveTo(-subLength, 0);
-        ctx.lineTo(0, rayWidth * 0.7);
-        ctx.lineTo(0, -rayWidth * 0.7);
-        ctx.fill();
-      }
-      
-      ctx.restore();
-      
-      // 4. Center item chest shadow
-      ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.beginPath();
-      ctx.ellipse(dx, dy + 10, 10, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      
-      // 5. Draw the item box itself
-      ctx.save();
-      ctx.fillStyle = rColor;
-      ctx.beginPath();
-      ctx.arc(dx, dy, 12, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.fillStyle = "#000";
-      ctx.font = "14px Arial";
-      ctx.textAlign = "center";
-      ctx.fillText("📦", dx, dy + 4);
-      ctx.restore();
-      
-      // 6. Draw floating item name metadata panel above the box
-      ctx.save();
-      ctx.font = "bold 9px Arial";
-      
-      const hanBadges = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
-      const curBadge = hanBadges[d.tier || 1] || '一';
-      const badgeText = `${d.name} (Đảng ${curBadge})`;
-      const textWidth = ctx.measureText(badgeText).width;
-      
-      ctx.fillStyle = "rgba(10, 10, 15, 0.85)";
-      ctx.strokeStyle = rColor;
-      ctx.lineWidth = 1;
-      
-      // Crisp retro board label
-      const bx = dx - textWidth / 2 - 6;
-      const by = dy - 28;
-      const bw = textWidth + 12;
-      const bh = 14;
-      
-      ctx.beginPath();
-      ctx.rect(bx, by, bw, bh);
-      ctx.fill();
-      ctx.stroke();
-      
-      // Write formatted title text
-      ctx.fillStyle = rColor;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(badgeText, dx, dy - 20);
-      ctx.restore();
+    drawDrops(ctx, {
+      drops: dropsRef.current,
+      cx,
+      cy,
+      viewWidth,
+      viewHeight,
+      time,
     });
 
     // Entities
-    entitiesRef.current.forEach((e) => {
-      const ex = e.x - cx;
-      const ey = e.y - cy;
-      if (
-        ex < -50 ||
-        ey < -50 ||
-        ex > viewWidth + 50 ||
-        ey > viewHeight + 50
-      )
-        return;
-
-      const isMoving =
-        Math.hypot(p.x - e.x, p.y - e.y) > p.radius + e.size + 5 && e.atkCd > 0;
-      drawHuman(
-        ctx,
-        ex,
-        ey,
-        e.size,
-        e.color,
-        e.x > p.x ? -1 : 1,
-        e.isBoss,
-        isMoving,
-        time,
-      );
-
-      // Entity Name if Boss
-      if (e.isBoss && e.name) {
-        ctx.fillStyle = e.isSubBoss ? "#e67e22" : "#9b59b6";
-        ctx.font = "bold 13px 'Courier New', Courier, monospace";
-        ctx.textAlign = "center";
-        
-        ctx.shadowColor = "black";
-        ctx.shadowBlur = 4;
-        ctx.lineWidth = 2;
-        ctx.strokeText(e.name, ex, ey - e.size - 25);
-        ctx.shadowBlur = 0;
-        ctx.fillText(e.name, ex, ey - e.size - 25);
-      }
-
-      // HP Bar
-      ctx.fillStyle = "#000";
-      ctx.fillRect(ex - 20, ey - e.size - 15, 40, 5);
-      ctx.fillStyle = e.isBoss ? "#f1c40f" : "#e74c3c";
-      ctx.fillRect(ex - 20, ey - e.size - 15, 40 * Math.max(0, Math.min(1, e.hp / e.maxHp)), 5);
-
-      // Draw element indicator next to HP Bar
-      if (e.element) {
-        const elColor = { Metal: '#f1c40f', Wood: '#2ecc71', Water: '#3498db', Fire: '#e74c3c', Earth: '#e67e22' };
-        const elEmoji = { Metal: '⚡', Wood: '🍃', Water: '💧', Fire: '🔥', Earth: '⛰️' };
-        ctx.fillStyle = elColor[e.element] || '#fff';
-        ctx.font = 'bold 9px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(elEmoji[e.element], ex - 24, ey - e.size - 10);
-      }
-
-      // Target ring
-      if (p.target?.id === e.id) {
-        ctx.strokeStyle = "#e74c3c";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(ex, ey + e.size, e.size, e.size * 0.4, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+    drawEntities(ctx, {
+      entities: entitiesRef.current,
+      cx,
+      cy,
+      viewWidth,
+      viewHeight,
+      player: p,
+      time,
+      images: {
+        playerSprite: playerSpriteRef.current,
+        bossSprite: bossSpriteRef.current,
+        mobSprite: mobSpriteRef.current,
+        playerSectSprites: playerSectSpritesRef.current,
+      },
     });
 
-    // Player
-    if (!p.dead) {
-      const px = p.x - cx;
-      const py = p.y - cy;
-
-      // Banner aura passive battlefield design (Highly optimized with nested strokes)
-      if (p.equipment.banner !== null) {
-        ctx.save();
-        // Thick low-opacity outer glow ring
-        ctx.strokeStyle = "rgba(243, 156, 18, 0.22)"; 
-        ctx.lineWidth = 12.0;
-        ctx.beginPath();
-        ctx.ellipse(px, py + p.radius, 160, 64, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Solid golden inner ring
-        ctx.strokeStyle = "rgba(243, 156, 18, 0.85)";
-        ctx.lineWidth = 2.8;
-        ctx.beginPath();
-        ctx.ellipse(px, py + p.radius, 160, 64, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.translate(px, py + p.radius);
-        ctx.strokeStyle = "rgba(243, 156, 18, 0.4)";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 160, 64, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Draw multiple rotating glowing fire dots/particles around the concentric ellipse track
-        const particleCount = 8;
-        for (let i = 0; i < particleCount; i++) {
-          const angle = (time * 0.0018 + (i * Math.PI * 2) / particleCount) % (Math.PI * 2);
-          const rx = Math.cos(angle) * 160;
-          const ry = Math.sin(angle) * 64;
-          
-          ctx.fillStyle = i % 2 === 0 ? "#ff8c00" : "#ffed4a";
-          ctx.beginPath();
-          ctx.arc(rx, ry, 5 + Math.sin(time * 0.006 + i) * 2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.restore();
-
-        // Banner text flag floating tag
-        ctx.save();
-        ctx.font = "bold 13px font-serif";
-        ctx.fillStyle = "#f39c12";
-        ctx.textAlign = "center";
-        ctx.fillText("🚩 QUÂN KỲ", px, py - 38);
-        ctx.restore();
-      }
-
-      ctx.strokeStyle = p.color + "88";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.ellipse(px, py + p.radius, 25, 10, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      drawHuman(ctx, px, py, 18, p.color, p.facing, false, p.moving, time, p.equipment.cloak !== null);
-
-      // Render Flying/Orbiting Companion Animal Mascot (Beast Companion)
-      const comp = stateRef.current.companion;
-      if (comp) {
-        const orbitRadius = 45;
-        const speedMult = 0.003;
-        const angle = time * speedMult;
-        const petX = px + Math.cos(angle) * orbitRadius;
-        const petY = py + Math.sin(angle) * orbitRadius - 10;
-        
-        // Draw a tiny shadow under the mascot
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
-        ctx.beginPath();
-        ctx.ellipse(petX, petY + 14, 12, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Draw mascot emoji or custom sect-specific sprite!
-        ctx.save();
-        const compSectId = getSectIdFromColor(p.color);
-        const compSprite = compSectId ? companionSectSpritesRef.current[compSectId] : null;
-        if (compSprite) {
-          const compW = 28;
-          const compH = 28;
-          ctx.drawImage(compSprite, petX - compW / 2, petY - compH / 2, compW, compH);
-        } else {
-          ctx.font = "18px Arial";
-          ctx.textAlign = "center";
-          ctx.fillText(comp.emoji || "🐯", petX, petY);
-        }
-        
-        // Render companion level above
-        ctx.font = "bold 9px font-sans";
-        ctx.fillStyle = "#f39c12";
-        ctx.textAlign = "center";
-        ctx.fillText(`Lg. ${comp.level || 1}`, petX, petY - 16);
-        ctx.restore();
-      }
-    }
-
-    // Cocos Engine Render Pass
-    ctx.save();
-    ctx.translate(-cx, -cy);
-    cocosSceneRef.current.render(ctx);
-    ctx.restore();
+    // Player (+ Banner & Companion)
+    drawPlayer(ctx, {
+      player: p,
+      companion: stateRef.current.companion,
+      cx,
+      cy,
+      time,
+      images: {
+        playerSprite: playerSpriteRef.current,
+        bossSprite: bossSpriteRef.current,
+        mobSprite: mobSpriteRef.current,
+        playerSectSprites: playerSectSpritesRef.current,
+      },
+      companionSectSprites: companionSectSpritesRef.current,
+    });
 
     // Floating Texts
-    ctx.font = "bold 16px font-serif";
-    ctx.textAlign = "center";
-    textsRef.current.forEach((t) => {
-      ctx.fillStyle = t.color;
-      ctx.globalAlpha = t.life;
-      ctx.fillText(t.text, t.x - cx, t.y - cy);
+    drawFloatingTexts(ctx, {
+      texts: textsRef.current,
+      cx,
+      cy,
     });
-    ctx.globalAlpha = 1;
 
     ctx.restore(); // Restore from game-world zoom transformation
 
     // Mini Map
-    const isMobile = canvas.width < 768;
-    const mmSize = isMobile ? 80 : 120;
-    const mmX = isMobile ? 12 : 32;
-    const mmY = isMobile ? 95 : 115;
-
-    ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.strokeStyle = "rgba(212,175,55,0.5)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(mmX + mmSize / 2, mmY + mmSize / 2, mmSize / 2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(mmX + mmSize / 2, mmY + mmSize / 2, mmSize / 2, 0, Math.PI * 2);
-    ctx.clip();
-
-    ctx.fillStyle = "rgba(255,255,255,0.05)";
-    ctx.fillRect(mmX, mmY, mmSize, mmSize);
-
-    const mapScale = mmSize / MAP_SIZE;
-    entitiesRef.current.forEach((e) => {
-      ctx.fillStyle = e.isBoss ? "#f1c40f" : "#e74c3c";
-      ctx.beginPath();
-      ctx.arc(
-        mmX + e.x * mapScale,
-        mmY + e.y * mapScale,
-        e.isBoss ? 4 : 2,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
+    drawMinimap(ctx, {
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      entities: entitiesRef.current,
+      player: p,
     });
-
-    if (!p.dead) {
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(mmX + p.x * mapScale, mmY + p.y * mapScale, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
 
     // Perf metrics and rendering
     const now = performance.now();

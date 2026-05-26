@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { GameState, Equipment, Rarity, MartialManual, HeritagePrefix, Quest } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { RARITY_COLORS, SECTS } from '../constants';

@@ -20,6 +20,7 @@ import QuestTracker from './components/QuestTracker';
 import { getCompanionForSect } from './utils/companionHelper';
 import { saveGame, loadGame, clearGameSave } from './utils/storage';
 import { getInitialManualsForSect, generateRandomQuest } from './utils/quest';
+import { sfx } from './utils/audio';
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -38,12 +39,48 @@ export default function App() {
 
   const [geminiEncounters, setGeminiEncounters] = useState<any[] | null>(null);
 
-  // Auto-save effect
+  // Auto-save & Game state transitions audio trigger
+  const lastStateRef = useRef<string | null>(null);
   useEffect(() => {
-    if (gameState && gameState.state !== 'GAMEOVER') {
-      saveGame(gameState);
+    if (gameState) {
+      if (gameState.state !== 'GAMEOVER') {
+        saveGame(gameState);
+      }
+      
+      const currentState = gameState.state;
+      if (currentState !== lastStateRef.current) {
+        if (currentState === 'CLEARED') {
+          sfx.playLevelUp();
+        } else if (currentState === 'GAMEOVER') {
+          sfx.playGameOver();
+        }
+        lastStateRef.current = currentState;
+      }
     }
   }, [gameState]);
+
+  // Global click audio effect handler for all buttons & interactive regions
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      let target = e.target as HTMLElement | null;
+      while (target && target !== document.body) {
+        const tagName = target.tagName.toLowerCase();
+        const role = target.getAttribute("role");
+        const hasCursorPointer = target.classList.contains("cursor-pointer") || target.style.cursor === "pointer";
+        
+        if (tagName === "button" || role === "button" || hasCursorPointer || target.closest("button") || target.closest('a')) {
+          sfx.playClick();
+          break;
+        }
+        target = target.parentElement;
+      }
+    };
+
+    window.addEventListener("click", handleGlobalClick, { capture: true });
+    return () => {
+      window.removeEventListener("click", handleGlobalClick, { capture: true });
+    };
+  }, []);
 
   // Pre-fetch Gemini encounters when a new stage starts
   useEffect(() => {
